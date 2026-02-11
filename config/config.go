@@ -72,7 +72,7 @@ type LiberecMpesaConfig struct {
 func Load() *Config {
 	return &Config{
 		Server: ServerConfig{
-			Port:         "8080",
+			Port:         "8099",
 			Env:          "development",
 			ReadTimeout:  10 * time.Second,
 			WriteTimeout: 10 * time.Second,
@@ -93,7 +93,7 @@ func Load() *Config {
 		OAuth: OAuthConfig{
 			GoogleClientID:     "your-google-client-id.apps.googleusercontent.com",
 			GoogleClientSecret: "your-google-client-secret",
-			GoogleRedirectURL:  "https://c7f0-102-0-25-74.ngrok-free.app/api/v1/auth/google/callback",
+			GoogleRedirectURL:  "metchi.theliberec.com/app/api/v1/auth/google/callback",
 		},
 		Cloudinary: CloudinaryConfig{
 			CloudName: "dcrdv2jcz",
@@ -110,7 +110,7 @@ func Load() *Config {
 			PaymentExpiry: 30 * time.Minute,
 		},
 		LiberecMpesa: func() LiberecMpesaConfig {
-			webhookBase := "https://c7f0-102-0-25-74.ngrok-free.app"
+			webhookBase := "metchi.theliberec.com"
 			if v := os.Getenv("MPESA_WEBHOOK_BASE_URL"); v != "" {
 				webhookBase = v
 			}
