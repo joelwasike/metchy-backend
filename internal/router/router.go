@@ -1,0 +1,145 @@
+package router
+
+import (
+	"time"
+
+	"lusty/config"
+	"lusty/internal/handler"
+	"lusty/internal/middleware"
+	"lusty/internal/repository"
+	"lusty/internal/service"
+	"lusty/internal/ws"
+	"lusty/pkg/cloudinary"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+)
+
+func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine {
+	if cfg.Server.Env == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	r := gin.Default()
+	r.Use(middleware.RateLimit(middleware.NewInMemoryRateLimiter(100, 60*time.Second)))
+
+	// Repositories
+	userRepo := repository.NewUserRepository(db)
+	locRepo := repository.NewLocationRepository(db)
+	presenceRepo := repository.NewPresenceRepository(db)
+	companionRepo := repository.NewCompanionRepository(db)
+	discoveryRepo := repository.NewDiscoveryRepository(db)
+	favRepo := repository.NewFavoriteRepository(db)
+	notificationRepo := repository.NewNotificationRepository(db)
+	blockRepo := repository.NewBlockRepository(db)
+	reportRepo := repository.NewReportRepository(db)
+	auditRepo := repository.NewAuditLogRepository(db)
+	paymentRepo := repository.NewPaymentRepository(db)
+	interactionRepo := repository.NewInteractionRepository(db)
+	walletRepo := repository.NewWalletRepository(db)
+
+	mapHub := ws.NewMapHub()
+	chatHub := ws.NewChatHub()
+	videoHub := ws.NewVideoHub()
+
+	// Services
+	authSvc := service.NewAuthService(cfg, userRepo)
+	notifSvc := service.NewNotificationService(notificationRepo)
+
+	// Handlers
+	authHandler := handler.NewAuthHandler(authSvc, presenceRepo, auditRepo, companionRepo)
+	meHandler := handler.NewMeHandler(userRepo, companionRepo, locRepo, favRepo, paymentRepo, interactionRepo)
+	googleOAuthHandler := handler.NewGoogleOAuthHandler(cfg, authSvc, presenceRepo, auditRepo)
+	discoveryHandler := handler.NewDiscoveryHandler(discoveryRepo)
+	companionHandler := handler.NewCompanionHandler(companionRepo, userRepo, interactionRepo, cloud)
+	locationHandler := handler.NewLocationHandler(locRepo, presenceRepo, companionRepo, cfg, mapHub)
+	presenceHandler := handler.NewPresenceHandler(presenceRepo, companionRepo, favRepo, notifSvc)
+	favoriteHandler := handler.NewFavoriteHandler(favRepo, companionRepo)
+	blockHandler := handler.NewBlockHandler(blockRepo)
+	reportHandler := handler.NewReportHandler(reportRepo, auditRepo)
+	notificationHandler := handler.NewNotificationHandler(notificationRepo)
+	pricingHandler := handler.NewPricingHandler(companionRepo)
+	boostHandler := handler.NewBoostHandler(companionRepo)
+	interactionHandler := handler.NewInteractionHandler(interactionRepo, companionRepo, paymentRepo, walletRepo, userRepo, notifSvc)
+	paymentWebhookHandler := handler.NewPaymentWebhookHandler(paymentRepo, auditRepo, notifSvc, cfg)
+	walletHandler := handler.NewWalletHandler(walletRepo)
+	mpesaHandler := handler.NewMpesaHandler(cfg, paymentRepo, interactionRepo, companionRepo, walletRepo, notifSvc)
+	mpesaWebhookHandler := handler.NewMpesaWebhookHandler(paymentRepo, interactionRepo, companionRepo, walletRepo, auditRepo, notifSvc)
+	chatHandler := handler.NewChatHandler(interactionRepo, companionRepo)
+	uploadHandler := handler.NewUploadHandler(cloud)
+	distanceHandler := handler.NewDistanceHandler(interactionRepo, companionRepo, locRepo, userRepo)
+
+	authMw := middleware.AuthRequired(&cfg.JWT)
+	adultMw := middleware.AdultOnly(cfg, userRepo)
+
+	api := r.Group("/api/v1")
+	{
+		authGroup := api.Group("/auth")
+		{
+			authGroup.POST("/register", authHandler.Register)
+			authGroup.POST("/login", authHandler.Login)
+			authGroup.POST("/logout", authMw, authHandler.Logout)
+			authGroup.PATCH("/change-password", authMw, authHandler.ChangePassword)
+			authGroup.POST("/refresh", authHandler.Refresh)
+			authGroup.GET("/google", googleOAuthHandler.Redirect)
+			authGroup.GET("/google/callback", googleOAuthHandler.Callback)
+			authGroup.POST("/google/token", googleOAuthHandler.Token)
+		}
+
+		api.GET("/discover", authMw, adultMw, discoveryHandler.Discover)
+		api.GET("/companions/:id", authMw, adultMw, companionHandler.GetProfile)
+
+		me := api.Group("/me")
+		me.Use(authMw)
+		{
+			me.GET("/profile", meHandler.GetProfile)
+			me.POST("/onboarding/complete", meHandler.CompleteOnboarding) // no adult - may set DOB for Google signups
+		}
+		meAdult := api.Group("/me")
+		meAdult.Use(authMw, adultMw)
+		{
+			meAdult.PATCH("/settings", meHandler.UpdateSettings)
+			meAdult.GET("/dashboard", meHandler.GetDashboard)
+			meAdult.PATCH("/location", locationHandler.UpdateLocation)
+			meAdult.GET("/location", locationHandler.GetMyLocation)
+			meAdult.PATCH("/presence", presenceHandler.SetPresence)
+			meAdult.GET("/presence", presenceHandler.GetMyPresence)
+			meAdult.GET("/favorites", favoriteHandler.List)
+			meAdult.GET("/notifications", notificationHandler.List)
+			meAdult.PUT("/notifications/:id/read", notificationHandler.MarkRead)
+			meAdult.GET("/wallet", walletHandler.GetBalance)
+			meAdult.GET("/interactions", interactionHandler.ListMine)
+			meAdult.GET("/interactions/:interaction_id/messages", chatHandler.GetMessages)
+			meAdult.GET("/interactions/:interaction_id/distance", distanceHandler.GetDistance)
+			meAdult.POST("/upload/chat", uploadHandler.UploadChatMedia)
+		}
+		api.POST("/payments/mpesa/initiate", authMw, adultMw, mpesaHandler.Initiate)
+		api.POST("/interactions", authMw, adultMw, interactionHandler.Create)
+		api.POST("/interactions/:id/accept", authMw, adultMw, middleware.RequireRole("COMPANION"), interactionHandler.Accept)
+		api.POST("/interactions/:id/reject", authMw, adultMw, middleware.RequireRole("COMPANION"), interactionHandler.Reject)
+		api.POST("/favorites/:companion_id", authMw, adultMw, favoriteHandler.Add)
+		api.DELETE("/favorites/:companion_id", authMw, adultMw, favoriteHandler.Remove)
+		api.POST("/block/:user_id", authMw, adultMw, blockHandler.Block)
+		api.DELETE("/block/:user_id", authMw, adultMw, blockHandler.Unblock)
+		api.POST("/reports", authMw, adultMw, reportHandler.Create)
+
+		companions := api.Group("/companions")
+		companions.Use(authMw, adultMw, middleware.RequireRole("COMPANION"))
+		{
+			companions.PUT("/profile", companionHandler.UpdateProfile)
+			companions.POST("/media", companionHandler.UploadMedia)
+			companions.GET("/pricing", pricingHandler.List)
+			companions.POST("/pricing", pricingHandler.Create)
+			companions.PUT("/pricing/:id", pricingHandler.Update)
+			companions.DELETE("/pricing/:id", pricingHandler.Delete)
+			companions.POST("/boost", boostHandler.Activate)
+		}
+		api.POST("/webhooks/payment", paymentWebhookHandler.Handle)
+		api.POST("/webhooks/mpesa", mpesaWebhookHandler.Handle)
+	}
+
+	r.GET("/ws/map", ws.UpgradeMapWS(&cfg.JWT, mapHub))
+	r.GET("/ws/chat", handler.UpgradeChatWS(&cfg.JWT, chatHub, interactionRepo))
+	r.GET("/ws/video", handler.UpgradeVideoWS(&cfg.JWT, videoHub, interactionRepo))
+
+	return r
+}
