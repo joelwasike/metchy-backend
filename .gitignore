@@ -2,7 +2,7 @@
 MobileApp/
 
 # Binaries
-server
+
 *.exe
 *.exe~
 *.dll

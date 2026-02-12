@@ -119,3 +119,17 @@ func (r *InteractionRepository) CountActiveSessionsByCompanionID(companionID uin
 		Count(&c).Error
 	return c, err
 }
+
+// ClientHasActiveSessionWithOtherCompanion returns true if the client has an active chat session
+// with any companion other than excludeCompanionID. Used to disable "Interested" when client
+// is already in an active chat with another companion.
+func (r *InteractionRepository) ClientHasActiveSessionWithOtherCompanion(clientID, excludeCompanionID uint) (bool, error) {
+	var c int64
+	err := r.db.Table("chat_sessions cs").
+		Joins("INNER JOIN interaction_requests ir ON cs.interaction_id = ir.id").
+		Where("ir.client_id = ? AND ir.companion_id != ? AND ir.status = ? AND cs.deleted_at IS NULL AND cs.ended_at IS NULL AND cs.ends_at > NOW()",
+			clientID, excludeCompanionID, "ACCEPTED").
+		Limit(1).
+		Count(&c).Error
+	return c > 0, err
+}

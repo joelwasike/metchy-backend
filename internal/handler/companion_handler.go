@@ -47,6 +47,10 @@ func (h *CompanionHandler) GetProfile(c *gin.Context) {
 				profMap["is_available"] = activeSessions == 0
 				profMap["availability_status"] = map[bool]string{true: "AVAILABLE", false: "NOT_AVAILABLE"}[activeSessions == 0]
 
+				// Interested button: inactive only when client has active chat with another companion
+				clientBusy, _ := h.interactionRepo.ClientHasActiveSessionWithOtherCompanion(userID, uint(id))
+				profMap["client_can_request"] = !clientBusy
+
 				ir, err := h.interactionRepo.GetLatestByClientAndCompanion(userID, uint(id))
 				if err == nil && ir != nil {
 					engaged := map[string]any{
