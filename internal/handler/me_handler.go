@@ -12,12 +12,13 @@ import (
 )
 
 type MeHandler struct {
-	userRepo      *repository.UserRepository
-	companionRepo *repository.CompanionRepository
-	locRepo       *repository.LocationRepository
-	favRepo       *repository.FavoriteRepository
-	paymentRepo   *repository.PaymentRepository
+	userRepo        *repository.UserRepository
+	companionRepo   *repository.CompanionRepository
+	locRepo         *repository.LocationRepository
+	favRepo         *repository.FavoriteRepository
+	paymentRepo     *repository.PaymentRepository
 	interactionRepo *repository.InteractionRepository
+	walletRepo      *repository.WalletRepository
 }
 
 func NewMeHandler(
@@ -27,6 +28,7 @@ func NewMeHandler(
 	favRepo *repository.FavoriteRepository,
 	paymentRepo *repository.PaymentRepository,
 	interactionRepo *repository.InteractionRepository,
+	walletRepo *repository.WalletRepository,
 ) *MeHandler {
 	return &MeHandler{
 		userRepo:        userRepo,
@@ -35,6 +37,7 @@ func NewMeHandler(
 		favRepo:         favRepo,
 		paymentRepo:     paymentRepo,
 		interactionRepo: interactionRepo,
+		walletRepo:      walletRepo,
 	}
 }
 
@@ -176,8 +179,14 @@ func (h *MeHandler) GetDashboard(c *gin.Context) {
 		return
 	}
 
-	// Earnings: sum of completed payments for accepted interactions where companion is receiver
-	earningsCents, _ := h.interactionRepo.GetEarningsByCompanionID(profile.ID)
+	// Wallet: balance (from payments) and withdrawable (after client confirms service done)
+	wallet, _ := h.walletRepo.GetOrCreate(userID)
+	balanceCents := int64(0)
+	withdrawableCents := int64(0)
+	if wallet != nil {
+		balanceCents = wallet.BalanceCents
+		withdrawableCents = wallet.WithdrawableCents
+	}
 
 	// Boost status
 	boost, _ := h.companionRepo.GetActiveBoost(profile.ID)
@@ -193,11 +202,12 @@ func (h *MeHandler) GetDashboard(c *gin.Context) {
 	activeSessions, _ := h.interactionRepo.CountActiveSessionsByCompanionID(profile.ID)
 
 	c.JSON(http.StatusOK, gin.H{
-		"earnings_cents":    earningsCents,
-		"is_boosted":        boost != nil,
-		"boost_ends_at":     boostEndsAt,
-		"favorites_count":  favCount,
-		"active_sessions":   activeSessions,
+		"earnings_cents":      balanceCents,
+		"withdrawable_cents":  withdrawableCents,
+		"is_boosted":          boost != nil,
+		"boost_ends_at":       boostEndsAt,
+		"favorites_count":    favCount,
+		"active_sessions":     activeSessions,
 	})
 }
 

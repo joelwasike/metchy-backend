@@ -148,6 +148,8 @@ func (h *MpesaHandler) Initiate(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "chat session create failed"})
 			return
 		}
+		// Credit companion's wallet (balance shown; withdrawable after client confirms service done)
+		_ = h.walletRepo.Credit(companion.UserID, amountCents)
 		_ = h.notifSvc.NotifyAccepted(clientID, companion.DisplayName, ir.ID)
 		c.JSON(http.StatusCreated, gin.H{
 			"order_id":        orderID,
@@ -257,6 +259,7 @@ func (h *MpesaHandler) Initiate(c *gin.Context) {
 		"amount":              req.AmountKES,
 		"mpesa_amount_kes":    mpesaCents / 100,
 		"currency":            "KES",
+		"payment_status":      "PENDING",
 		"message":             msg,
 	})
 }

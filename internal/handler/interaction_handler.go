@@ -161,19 +161,21 @@ func (h *InteractionHandler) ListMine(c *gin.Context) {
 			companionName = ir.Companion.DisplayName
 		}
 		entry := gin.H{
-			"id":               ir.ID,
-			"client_id":        ir.ClientID,
-			"companion_id":     ir.CompanionID,
-			"interaction_type": ir.InteractionType,
-			"payment_id":       ir.PaymentID,
-			"status":           ir.Status,
-			"duration_minutes": ir.DurationMinutes,
-			"created_at":       ir.CreatedAt,
-			"companion":        gin.H{"display_name": companionName},
+			"id":                 ir.ID,
+			"client_id":          ir.ClientID,
+			"companion_id":       ir.CompanionID,
+			"interaction_type":   ir.InteractionType,
+			"payment_id":         ir.PaymentID,
+			"status":             ir.Status,
+			"service_completed":  ir.ServiceCompletedAt != nil,
+			"duration_minutes":   ir.DurationMinutes,
+			"created_at":         ir.CreatedAt,
+			"companion":          gin.H{"display_name": companionName},
 		}
 		if ir.Status == domain.RequestStatusAccepted {
 			if session, _ := h.interactionRepo.GetChatSessionByInteractionID(ir.ID); session != nil {
 				entry["session_ends_at"] = session.EndsAt
+				entry["session_ended"] = session.EndedAt != nil
 			}
 		}
 		out = append(out, entry)
@@ -252,4 +254,49 @@ func (h *InteractionHandler) Reject(c *gin.Context) {
 		_ = h.notifSvc.NotifyRejected(ir.ClientID, profile.DisplayName)
 	}
 	c.JSON(http.StatusOK, ir)
+}
+
+// ServiceDone is called by the client when they confirm the service is complete.
+// Marks interaction as done, ends chat session, deletes messages, credits companion's withdrawable balance.
+func (h *InteractionHandler) ServiceDone(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	role, _ := c.Get("role")
+	if roleStr, _ := role.(string); roleStr != domain.RoleClient {
+		c.JSON(http.StatusForbidden, gin.H{"error": "client only"})
+		return
+	}
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	ir, err := h.interactionRepo.GetByID(uint(id))
+	if err != nil || ir == nil || ir.ClientID != userID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "interaction not found"})
+		return
+	}
+	if ir.Status != domain.RequestStatusAccepted {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "interaction not accepted"})
+		return
+	}
+	if ir.ServiceCompletedAt != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "service already marked done"})
+		return
+	}
+	now := time.Now()
+	ir.ServiceCompletedAt = &now
+	if err := h.interactionRepo.Update(ir); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "update failed"})
+		return
+	}
+	session, _ := h.interactionRepo.GetChatSessionByInteractionID(ir.ID)
+	if session != nil {
+		session.EndedAt = &now
+		_ = h.interactionRepo.UpdateChatSession(session)
+		_ = h.interactionRepo.DeleteMessagesBySessionID(session.ID)
+	}
+	// Credit companion's withdrawable balance so they can withdraw
+	if ir.PaymentID != nil && ir.Payment != nil && ir.Payment.Status == "COMPLETED" {
+		comp, _ := h.companionRepo.GetByID(ir.CompanionID)
+		if comp != nil {
+			_ = h.walletRepo.CreditWithdrawable(comp.UserID, ir.Payment.AmountCents)
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Service confirmed. Companion can now withdraw."})
 }

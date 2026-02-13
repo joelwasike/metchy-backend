@@ -47,7 +47,7 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 
 	// Handlers
 	authHandler := handler.NewAuthHandler(authSvc, presenceRepo, auditRepo, companionRepo)
-	meHandler := handler.NewMeHandler(userRepo, companionRepo, locRepo, favRepo, paymentRepo, interactionRepo)
+	meHandler := handler.NewMeHandler(userRepo, companionRepo, locRepo, favRepo, paymentRepo, interactionRepo, walletRepo)
 	googleOAuthHandler := handler.NewGoogleOAuthHandler(cfg, authSvc, presenceRepo, auditRepo)
 	discoveryHandler := handler.NewDiscoveryHandler(discoveryRepo)
 	companionHandler := handler.NewCompanionHandler(companionRepo, userRepo, interactionRepo, cloud)
@@ -64,6 +64,9 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 	walletHandler := handler.NewWalletHandler(walletRepo)
 	mpesaHandler := handler.NewMpesaHandler(cfg, paymentRepo, interactionRepo, companionRepo, walletRepo, notifSvc)
 	mpesaWebhookHandler := handler.NewMpesaWebhookHandler(paymentRepo, interactionRepo, companionRepo, walletRepo, auditRepo, notifSvc)
+	withdrawalRepo := repository.NewWithdrawalRepository(db)
+	withdrawalHandler := handler.NewWithdrawalHandler(cfg, walletRepo, withdrawalRepo, companionRepo)
+	withdrawalWebhookHandler := handler.NewWithdrawalWebhookHandler(withdrawalRepo, walletRepo)
 	chatHandler := handler.NewChatHandler(interactionRepo, companionRepo)
 	uploadHandler := handler.NewUploadHandler(cloud)
 	distanceHandler := handler.NewDistanceHandler(interactionRepo, companionRepo, locRepo, userRepo)
@@ -107,6 +110,7 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 			meAdult.GET("/notifications", notificationHandler.List)
 			meAdult.PUT("/notifications/:id/read", notificationHandler.MarkRead)
 			meAdult.GET("/wallet", walletHandler.GetBalance)
+			meAdult.POST("/withdraw", withdrawalHandler.Create)
 			meAdult.GET("/interactions", interactionHandler.ListMine)
 			meAdult.GET("/interactions/:interaction_id/messages", chatHandler.GetMessages)
 			meAdult.GET("/interactions/:interaction_id/distance", distanceHandler.GetDistance)
@@ -116,6 +120,7 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 		api.POST("/interactions", authMw, adultMw, interactionHandler.Create)
 		api.POST("/interactions/:id/accept", authMw, adultMw, middleware.RequireRole("COMPANION"), interactionHandler.Accept)
 		api.POST("/interactions/:id/reject", authMw, adultMw, middleware.RequireRole("COMPANION"), interactionHandler.Reject)
+		api.POST("/interactions/:id/service-done", authMw, adultMw, middleware.RequireRole("CLIENT"), interactionHandler.ServiceDone)
 		api.POST("/favorites/:companion_id", authMw, adultMw, favoriteHandler.Add)
 		api.DELETE("/favorites/:companion_id", authMw, adultMw, favoriteHandler.Remove)
 		api.POST("/block/:user_id", authMw, adultMw, blockHandler.Block)
@@ -135,6 +140,7 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 		}
 		api.POST("/webhooks/payment", paymentWebhookHandler.Handle)
 		api.POST("/webhooks/mpesa", mpesaWebhookHandler.Handle)
+		api.POST("/webhooks/withdrawal", withdrawalWebhookHandler.Handle)
 	}
 
 	r.GET("/ws/map", ws.UpgradeMapWS(&cfg.JWT, mapHub))

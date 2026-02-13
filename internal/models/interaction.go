@@ -16,9 +16,10 @@ type InteractionRequest struct {
 	PaymentID        *uint          `gorm:"index" json:"payment_id"`
 	Status           string         `gorm:"size:20;not null;index" json:"status"` // PENDING, ACCEPTED, REJECTED, EXPIRED
 	DurationMinutes  int            `json:"duration_minutes"`
-	ExpiresAt        *time.Time     `json:"expires_at"`
-	AcceptedAt       *time.Time     `json:"accepted_at"`
-	RejectedAt       *time.Time     `json:"rejected_at"`
+	ExpiresAt          *time.Time     `json:"expires_at"`
+	AcceptedAt         *time.Time     `json:"accepted_at"`
+	RejectedAt         *time.Time     `json:"rejected_at"`
+	ServiceCompletedAt *time.Time     `json:"service_completed_at"` // set when client confirms service done
 	CreatedAt        time.Time      `json:"created_at"`
 	UpdatedAt        time.Time      `json:"updated_at"`
 	DeletedAt        gorm.DeletedAt `gorm:"index" json:"-"`

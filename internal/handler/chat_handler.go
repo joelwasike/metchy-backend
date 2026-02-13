@@ -45,7 +45,11 @@ func (h *ChatHandler) GetMessages(c *gin.Context) {
 	}
 	session, err := h.interactionRepo.GetChatSessionByInteractionID(uint(interactionID))
 	if err != nil || session == nil {
-		c.JSON(http.StatusOK, gin.H{"messages": []interface{}{}})
+		c.JSON(http.StatusOK, gin.H{"messages": []interface{}{}, "service_completed": ir.ServiceCompletedAt != nil, "session_ended": true})
+		return
+	}
+	if session.EndedAt != nil {
+		c.JSON(http.StatusOK, gin.H{"messages": []interface{}{}, "service_completed": true, "session_ended": true})
 		return
 	}
 	if session.EndsAt.Before(time.Now()) {
@@ -59,5 +63,6 @@ func (h *ChatHandler) GetMessages(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "list failed"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"messages": list})
+	resp := gin.H{"messages": list, "service_completed": ir.ServiceCompletedAt != nil, "session_ended": session.EndedAt != nil}
+	c.JSON(http.StatusOK, resp)
 }

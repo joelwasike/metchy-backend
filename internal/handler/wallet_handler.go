@@ -25,8 +25,9 @@ func (h *WalletHandler) GetBalance(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "wallet error"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"balance_cents": w.BalanceCents,
-		"currency":      w.Currency,
-	})
+	resp := gin.H{"balance_cents": w.BalanceCents, "currency": w.Currency}
+	if w.WithdrawableCents != 0 {
+		resp["withdrawable_cents"] = w.WithdrawableCents
+	}
+	c.JSON(http.StatusOK, resp)
 }

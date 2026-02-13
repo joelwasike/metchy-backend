@@ -54,11 +54,13 @@ func (h *CompanionHandler) GetProfile(c *gin.Context) {
 				ir, err := h.interactionRepo.GetLatestByClientAndCompanion(userID, uint(id))
 				if err == nil && ir != nil {
 					engaged := map[string]any{
-						"interaction_id": ir.ID,
-						"status":        ir.Status,
+						"interaction_id":      ir.ID,
+						"status":             ir.Status,
+						"service_completed":  ir.ServiceCompletedAt != nil,
 					}
 					if sess, _ := h.interactionRepo.GetChatSessionByInteractionID(ir.ID); sess != nil {
 						engaged["session_ends_at"] = sess.EndsAt
+						engaged["session_ended"] = sess.EndedAt != nil
 					}
 					profMap["engagement"] = engaged
 				}

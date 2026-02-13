@@ -140,28 +140,42 @@ func (h *MpesaWebhookHandler) Handle(c *gin.Context) {
 	})
 
 	// Auto-accept interaction when payment completes: set ACCEPTED, create chat session
+	// If companion already rejected: refund client's wallet instead
 	ir, err := h.interactionRepo.GetByPaymentID(p.ID)
-	if err == nil && ir != nil && ir.Status == "PENDING" {
-		now := time.Now()
-		ir.Status = "ACCEPTED"
-		ir.AcceptedAt = &now
-		if err := h.interactionRepo.Update(ir); err != nil {
-			log.Printf("[MPESA callback] auto-accept update failed: %v", err)
-		} else {
-			endsAt := now.Add(time.Duration(ir.DurationMinutes) * time.Minute)
-			if ir.DurationMinutes <= 0 {
-				endsAt = now.Add(24 * time.Hour)
+	if err == nil && ir != nil {
+		if ir.Status == "REJECTED" {
+			// Companion rejected before webhook arrived: refund client to wallet
+			if ir.Payment != nil {
+				_ = h.walletRepo.Credit(ir.ClientID, ir.Payment.AmountCents)
+				log.Printf("[MPESA callback] interaction %d already REJECTED, refunded %d cents to client %d", ir.ID, ir.Payment.AmountCents, ir.ClientID)
 			}
-			session := &models.ChatSession{InteractionID: ir.ID, StartedAt: now, EndsAt: endsAt}
-			if err := h.interactionRepo.CreateChatSession(session); err != nil {
-				log.Printf("[MPESA callback] create chat session failed: %v", err)
+		} else if ir.Status == "PENDING" {
+			now := time.Now()
+			ir.Status = "ACCEPTED"
+			ir.AcceptedAt = &now
+			if err := h.interactionRepo.Update(ir); err != nil {
+				log.Printf("[MPESA callback] auto-accept update failed: %v", err)
 			} else {
-				companionName := "Companion"
-				if comp, _ := h.companionRepo.GetByID(ir.CompanionID); comp != nil {
-					companionName = comp.DisplayName
+				endsAt := now.Add(time.Duration(ir.DurationMinutes) * time.Minute)
+				if ir.DurationMinutes <= 0 {
+					endsAt = now.Add(24 * time.Hour)
 				}
-				_ = h.notifSvc.NotifyAccepted(ir.ClientID, companionName, ir.ID)
-				log.Printf("[MPESA callback] auto-accepted interaction %d, chat session created", ir.ID)
+				session := &models.ChatSession{InteractionID: ir.ID, StartedAt: now, EndsAt: endsAt}
+				if err := h.interactionRepo.CreateChatSession(session); err != nil {
+					log.Printf("[MPESA callback] create chat session failed: %v", err)
+				} else {
+					companionName := "Companion"
+					comp, _ := h.companionRepo.GetByID(ir.CompanionID)
+					if comp != nil {
+						companionName = comp.DisplayName
+						// Credit companion's wallet (balance shown; withdrawable after client confirms service done)
+						if ir.Payment != nil {
+							_ = h.walletRepo.Credit(comp.UserID, ir.Payment.AmountCents)
+						}
+					}
+					_ = h.notifSvc.NotifyAccepted(ir.ClientID, companionName, ir.ID)
+					log.Printf("[MPESA callback] auto-accepted interaction %d, chat session created", ir.ID)
+				}
 			}
 		}
 	}

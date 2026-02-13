@@ -63,7 +63,7 @@ func (r *InteractionRepository) GetLatestByClientAndCompanion(clientUserID, comp
 
 func (r *InteractionRepository) GetByPaymentID(paymentID uint) (*models.InteractionRequest, error) {
 	var ir models.InteractionRequest
-	err := r.db.Where("payment_id = ?", paymentID).Preload("Companion").Preload("Client").First(&ir).Error
+	err := r.db.Where("payment_id = ?", paymentID).Preload("Companion").Preload("Client").Preload("Payment").First(&ir).Error
 	if err != nil {
 		return nil, err
 	}
@@ -97,6 +97,11 @@ func (r *InteractionRepository) GetMessagesBySessionID(sessionID uint, limit, of
 	var list []models.ChatMessage
 	err := r.db.Where("session_id = ?", sessionID).Order("created_at ASC").Limit(limit).Offset(offset).Find(&list).Error
 	return list, err
+}
+
+// DeleteMessagesBySessionID soft-deletes all messages in a session.
+func (r *InteractionRepository) DeleteMessagesBySessionID(sessionID uint) error {
+	return r.db.Where("session_id = ?", sessionID).Delete(&models.ChatMessage{}).Error
 }
 
 // GetEarningsByCompanionID returns total earnings (amount_cents) from completed payments for accepted interactions.

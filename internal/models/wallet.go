@@ -7,10 +7,11 @@ import (
 )
 
 type Wallet struct {
-	ID           uint           `gorm:"primaryKey" json:"id"`
-	UserID       uint           `gorm:"uniqueIndex;not null" json:"user_id"`
-	BalanceCents int64          `gorm:"not null;default:0" json:"balance_cents"`
-	Currency     string         `gorm:"size:3;default:'KES'" json:"currency"`
+	ID                 uint           `gorm:"primaryKey" json:"id"`
+	UserID             uint           `gorm:"uniqueIndex;not null" json:"user_id"`
+	BalanceCents       int64          `gorm:"not null;default:0" json:"balance_cents"`         // total earnings (for companions: from completed payments)
+	WithdrawableCents   int64          `gorm:"not null;default:0" json:"withdrawable_cents"`   // companion: amount available to withdraw (after service done)
+	Currency           string         `gorm:"size:3;default:'KES'" json:"currency"`
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
