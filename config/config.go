@@ -110,7 +110,7 @@ func Load() *Config {
 			PaymentExpiry: 30 * time.Minute,
 		},
 		LiberecMpesa: func() LiberecMpesaConfig {
-			webhookBase := "metchi.theliberec.com"
+			webhookBase := "https://metchi.theliberec.com"
 			if v := os.Getenv("MPESA_WEBHOOK_BASE_URL"); v != "" {
 				webhookBase = v
 			}
