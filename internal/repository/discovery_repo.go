@@ -11,19 +11,20 @@ import (
 
 // DiscoveryFilters for Tinder-style search.
 type DiscoveryFilters struct {
-	Latitude    float64
-	Longitude   float64
-	RadiusKm    float64
-	Category    string // e.g. "tall", "slim" - filter by categories
-	MinAge      *int
-	MaxAge      *int
-	MinPrice    *int64
-	MaxPrice    *int64
-	OnlineOnly  bool
+	Latitude     float64
+	Longitude    float64
+	RadiusKm     float64
+	Category     string   // e.g. "tall", "slim" - filter by categories
+	Services     []string // e.g. ["SEX", "MASSAGE"] - filter by interests (comma-separated in profile)
+	MinAge       *int
+	MaxAge       *int
+	MinPrice     *int64
+	MaxPrice     *int64
+	OnlineOnly   bool
 	BoostedFirst bool
-	SortBy      string // distance, recently_active, boost
-	Limit       int
-	Offset      int
+	SortBy       string // distance, recently_active, boost
+	Limit        int
+	Offset       int
 }
 
 type DiscoveryResult struct {
@@ -77,6 +78,12 @@ func (r *DiscoveryRepository) DiscoverCompanions(f DiscoveryFilters) ([]Discover
 	if f.Category != "" {
 		// Match exact category in comma-separated list
 		query = query.Where("CONCAT(',', cp.categories, ',') LIKE ?", "%,"+f.Category+",%")
+	}
+	for _, svc := range f.Services {
+		if svc != "" {
+			// Match service in interests (comma-separated: SEX,MASSAGE,OTHER etc)
+			query = query.Where("CONCAT(',', COALESCE(cp.interests,''), ',') LIKE ?", "%,"+svc+",%")
+		}
 	}
 	if f.OnlineOnly {
 		query = query.Where("up.is_online = ?", true)
@@ -202,6 +209,11 @@ func (r *DiscoveryRepository) DiscoverCompanionsFallback(f DiscoveryFilters) ([]
 
 	if f.Category != "" {
 		query = query.Where("CONCAT(',', cp.categories, ',') LIKE ?", "%,"+f.Category+",%")
+	}
+	for _, svc := range f.Services {
+		if svc != "" {
+			query = query.Where("CONCAT(',', COALESCE(cp.interests,''), ',') LIKE ?", "%,"+svc+",%")
+		}
 	}
 
 	var rows []struct {

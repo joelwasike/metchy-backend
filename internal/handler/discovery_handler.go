@@ -54,6 +54,14 @@ func (h *DiscoveryHandler) Discover(c *gin.Context) {
 	boostedFirst := c.DefaultQuery("boost_first", "true") != "false"
 	sortBy := c.DefaultQuery("sort", "distance")
 	category := strings.TrimSpace(c.Query("category"))
+	var services []string
+	if svc := strings.TrimSpace(c.Query("services")); svc != "" {
+		for _, s := range strings.Split(svc, ",") {
+			if t := strings.TrimSpace(s); t != "" {
+				services = append(services, t)
+			}
+		}
+	}
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 	if limit > 50 {
@@ -65,6 +73,7 @@ func (h *DiscoveryHandler) Discover(c *gin.Context) {
 		Longitude:     lng,
 		RadiusKm:      radiusKm,
 		Category:      category,
+		Services:      services,
 		MinAge:        minAge,
 		MaxAge:        maxAge,
 		MinPrice:      minPrice,

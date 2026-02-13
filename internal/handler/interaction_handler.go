@@ -119,12 +119,14 @@ func (h *InteractionHandler) ListMine(c *gin.Context) {
 		out := make([]gin.H, 0, len(list))
 		for _, ir := range list {
 			clientDisplay := ""
+			clientAvatarURL := ""
 			if c, _ := h.userRepo.GetByID(ir.ClientID); c != nil {
 				if c.Username != "" {
 					clientDisplay = c.Username
 				} else {
 					clientDisplay = c.Email
 				}
+				clientAvatarURL = c.AvatarURL
 			}
 			entry := gin.H{
 				"id":                 ir.ID,
@@ -135,7 +137,7 @@ func (h *InteractionHandler) ListMine(c *gin.Context) {
 				"status":             ir.Status,
 				"duration_minutes":   ir.DurationMinutes,
 				"created_at":         ir.CreatedAt,
-				"client":             gin.H{"username": clientDisplay, "email": clientDisplay},
+				"client":             gin.H{"username": clientDisplay, "email": clientDisplay, "avatar_url": clientAvatarURL},
 				"payment":            ir.Payment,
 			}
 			if ir.Status == domain.RequestStatusAccepted {
@@ -153,12 +155,14 @@ func (h *InteractionHandler) ListMine(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "list failed"})
 		return
 	}
-	// Include companion display_name and session_ends_at for chat list
+	// Include companion display_name, main_profile_image_url and session_ends_at for chat list
 	out := make([]gin.H, 0, len(list))
 	for _, ir := range list {
 		companionName := ""
+		mainImageURL := ""
 		if ir.Companion.ID != 0 {
 			companionName = ir.Companion.DisplayName
+			mainImageURL = ir.Companion.MainProfileImageURL
 		}
 		entry := gin.H{
 			"id":                 ir.ID,
@@ -170,7 +174,7 @@ func (h *InteractionHandler) ListMine(c *gin.Context) {
 			"service_completed":  ir.ServiceCompletedAt != nil,
 			"duration_minutes":   ir.DurationMinutes,
 			"created_at":         ir.CreatedAt,
-			"companion":          gin.H{"display_name": companionName},
+			"companion":          gin.H{"display_name": companionName, "main_profile_image_url": mainImageURL},
 		}
 		if ir.Status == domain.RequestStatusAccepted {
 			if session, _ := h.interactionRepo.GetChatSessionByInteractionID(ir.ID); session != nil {
