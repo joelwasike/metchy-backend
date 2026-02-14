@@ -169,9 +169,9 @@ func (h *MpesaWebhookHandler) Handle(c *gin.Context) {
 					if comp != nil {
 						companionName = comp.DisplayName
 						// Credit companion's wallet (balance shown; withdrawable after client confirms service done)
-						if ir.Payment != nil {
-							_ = h.walletRepo.Credit(comp.UserID, ir.Payment.AmountCents)
-						}
+						amountCents := p.AmountCents
+						_ = h.walletRepo.Credit(comp.UserID, amountCents)
+						log.Printf("[MPESA callback] credited companion %d wallet %d cents", comp.UserID, amountCents)
 					}
 					_ = h.notifSvc.NotifyAccepted(ir.ClientID, companionName, ir.ID)
 					log.Printf("[MPESA callback] auto-accepted interaction %d, chat session created", ir.ID)
