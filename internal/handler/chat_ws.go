@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
@@ -86,11 +85,9 @@ func UpgradeChatWS(cfg *config.JWTConfig, chatHub *ws.ChatHub, interactionRepo *
 		}
 		room := chatHub.GetOrCreateRoom(interactionID, clientID, ir.CompanionID)
 		room.Join(client)
-		log.Printf("[CHAT] user %d joined room interaction=%d (room_size=%d)", claims.UserID, interactionID, room.ClientCount())
 		defer func() {
 			room.Leave(client)
 			client.Close()
-			log.Printf("[CHAT] user %d left room interaction=%d", claims.UserID, interactionID)
 		}()
 		conn.SetReadDeadline(time.Now().Add(chatPongWait))
 		conn.SetPongHandler(func(string) error {
@@ -108,13 +105,11 @@ func UpgradeChatWS(cfg *config.JWTConfig, chatHub *ws.ChatHub, interactionRepo *
 					}
 					conn.SetWriteDeadline(time.Now().Add(chatWriteWait))
 					if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-						log.Printf("[CHAT] write error user=%d: %v", claims.UserID, err)
 						return
 					}
 				case <-ticker.C:
 					conn.SetWriteDeadline(time.Now().Add(chatWriteWait))
 					if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-						log.Printf("[CHAT] ping error user=%d: %v", claims.UserID, err)
 						return
 					}
 				}
@@ -123,7 +118,6 @@ func UpgradeChatWS(cfg *config.JWTConfig, chatHub *ws.ChatHub, interactionRepo *
 		for {
 			_, raw, err := conn.ReadMessage()
 			if err != nil {
-				log.Printf("[CHAT] read error user=%d interaction=%d: %v", claims.UserID, interactionID, err)
 				break
 			}
 			var msg struct {
@@ -134,7 +128,6 @@ func UpgradeChatWS(cfg *config.JWTConfig, chatHub *ws.ChatHub, interactionRepo *
 			if json.Unmarshal(raw, &msg) != nil || msg.Type != "message" {
 				continue
 			}
-			log.Printf("[CHAT] msg from user=%d interaction=%d len=%d", claims.UserID, interactionID, len(msg.Content))
 			cm := &models.ChatMessage{
 				SessionID: session.ID,
 				SenderID:  claims.UserID,
@@ -142,7 +135,6 @@ func UpgradeChatWS(cfg *config.JWTConfig, chatHub *ws.ChatHub, interactionRepo *
 				MediaURL:  msg.MediaURL,
 			}
 			if err := interactionRepo.CreateMessage(cm); err != nil {
-				log.Printf("[CHAT] CreateMessage error: %v", err)
 				continue
 			}
 			payload := map[string]interface{}{
@@ -154,7 +146,6 @@ func UpgradeChatWS(cfg *config.JWTConfig, chatHub *ws.ChatHub, interactionRepo *
 				"created_at": cm.CreatedAt,
 			}
 			room.Broadcast(client, payload)
-			log.Printf("[CHAT] broadcast to %d other clients", room.ClientCount()-1)
 		}
 	}
 }

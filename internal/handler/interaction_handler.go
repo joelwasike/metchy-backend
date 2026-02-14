@@ -204,6 +204,11 @@ func (h *InteractionHandler) Accept(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "request not pending"})
 		return
 	}
+	// Only allow accept when payment is completed
+	if ir.PaymentID == nil || ir.Payment == nil || ir.Payment.Status != "COMPLETED" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "payment not completed yet"})
+		return
+	}
 	now := time.Now()
 	ir.Status = domain.RequestStatusAccepted
 	ir.AcceptedAt = &now
@@ -221,6 +226,8 @@ func (h *InteractionHandler) Accept(c *gin.Context) {
 		EndsAt:        endsAt,
 	}
 	_ = h.interactionRepo.CreateChatSession(session)
+	// Credit companion's wallet (withdrawable after client confirms service done)
+	_ = h.walletRepo.Credit(profile.UserID, ir.Payment.AmountCents)
 	_ = h.notifSvc.NotifyAccepted(ir.ClientID, profile.DisplayName, ir.ID)
 	c.JSON(http.StatusOK, ir)
 }

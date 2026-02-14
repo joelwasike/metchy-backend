@@ -26,6 +26,7 @@ type MpesaHandler struct {
 	interactionRepo *repository.InteractionRepository
 	companionRepo   *repository.CompanionRepository
 	walletRepo      *repository.WalletRepository
+	userRepo        *repository.UserRepository
 	notifSvc        *service.NotificationService
 	mpesaProvider   payment.Provider
 }
@@ -36,6 +37,7 @@ func NewMpesaHandler(
 	interactionRepo *repository.InteractionRepository,
 	companionRepo *repository.CompanionRepository,
 	walletRepo *repository.WalletRepository,
+	userRepo *repository.UserRepository,
 	notifSvc *service.NotificationService,
 ) *MpesaHandler {
 	m := &MpesaHandler{
@@ -44,6 +46,7 @@ func NewMpesaHandler(
 		interactionRepo: interactionRepo,
 		companionRepo:   companionRepo,
 		walletRepo:      walletRepo,
+		userRepo:       userRepo,
 		notifSvc:        notifSvc,
 	}
 	m.mpesaProvider = payment.NewLiberecMpesaProvider(
@@ -130,34 +133,23 @@ func (h *MpesaHandler) Initiate(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "interaction create failed"})
 			return
 		}
-		// Auto-accept on wallet payment: set ACCEPTED, create chat session
-		ir.Status = domain.RequestStatusAccepted
-		ir.AcceptedAt = &now
-		if err := h.interactionRepo.Update(ir); err != nil {
-			h.walletRepo.Credit(clientID, walletCents)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "accept failed"})
-			return
+		// Companion must accept before chat unlocks
+		clientName := "A client"
+		if client, _ := h.userRepo.GetByID(clientID); client != nil {
+			if client.Username != "" {
+				clientName = client.Username
+			} else {
+				clientName = client.Email
+			}
 		}
-		endsAt := now.Add(time.Duration(ir.DurationMinutes) * time.Minute)
-		if ir.DurationMinutes <= 0 {
-			endsAt = now.Add(24 * time.Hour)
-		}
-		session := &models.ChatSession{InteractionID: ir.ID, StartedAt: now, EndsAt: endsAt}
-		if err := h.interactionRepo.CreateChatSession(session); err != nil {
-			h.walletRepo.Credit(clientID, walletCents)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "chat session create failed"})
-			return
-		}
-		// Credit companion's wallet (balance shown; withdrawable after client confirms service done)
-		_ = h.walletRepo.Credit(companion.UserID, amountCents)
-		_ = h.notifSvc.NotifyAccepted(clientID, companion.DisplayName, ir.ID)
+		_ = h.notifSvc.NotifyPaidRequest(companion.UserID, ir.ID, clientName, req.InteractionType)
 		c.JSON(http.StatusCreated, gin.H{
 			"order_id":        orderID,
 			"interaction_id":  ir.ID,
 			"amount":          req.AmountKES,
 			"currency":        "KES",
 			"payment_status":  "COMPLETED",
-			"message":         "Payment successful! You can now chat.",
+			"message":         "Payment successful! Waiting for " + companion.DisplayName + " to accept your request.",
 		})
 		return
 	}

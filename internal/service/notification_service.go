@@ -34,6 +34,15 @@ func (s *NotificationService) NotifyNewRequest(companionUserID uint, requestID u
 	return s.Notify(companionUserID, "NEW_REQUEST", "New request", clientName+" sent you an interaction request", map[string]interface{}{"request_id": requestID})
 }
 
+// NotifyPaidRequest notifies the companion that a client has paid for a service. They should accept or deny.
+func (s *NotificationService) NotifyPaidRequest(companionUserID uint, requestID uint, clientName string, serviceType string) error {
+	svc := serviceType
+	if svc == "" {
+		svc = "chat"
+	}
+	return s.Notify(companionUserID, "PAID_REQUEST", "Paid request", clientName+" has paid for "+svc+". Accept or Deny.", map[string]interface{}{"request_id": requestID})
+}
+
 func (s *NotificationService) NotifyAccepted(clientUserID uint, companionName string, interactionID uint) error {
 	return s.Notify(clientUserID, "REQUEST_ACCEPTED", "Request accepted", companionName+" accepted your request", map[string]interface{}{"interaction_id": interactionID})
 }

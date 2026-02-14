@@ -11,7 +11,7 @@ import (
 
 func NewDB(cfg *config.DatabaseConfig) (*gorm.DB, error) {
 	db, err := gorm.Open(mysql.Open(cfg.DSN), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(logger.Error), // Only log errors, not every SQL query
 	})
 	if err != nil {
 		return nil, err

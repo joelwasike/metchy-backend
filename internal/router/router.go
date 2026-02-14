@@ -19,7 +19,9 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 	if cfg.Server.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	r := gin.Default()
+	r := gin.New()
+	r.Use(gin.Recovery())
+	// Skip gin.Logger() to reduce log noise; use gin.Default() if you need request logging
 	r.Use(middleware.RateLimit(middleware.NewInMemoryRateLimiter(100, 60*time.Second)))
 
 	// Repositories
@@ -62,7 +64,7 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 	interactionHandler := handler.NewInteractionHandler(interactionRepo, companionRepo, paymentRepo, walletRepo, userRepo, notifSvc)
 	paymentWebhookHandler := handler.NewPaymentWebhookHandler(paymentRepo, auditRepo, notifSvc, cfg)
 	walletHandler := handler.NewWalletHandler(walletRepo)
-	mpesaHandler := handler.NewMpesaHandler(cfg, paymentRepo, interactionRepo, companionRepo, walletRepo, notifSvc)
+	mpesaHandler := handler.NewMpesaHandler(cfg, paymentRepo, interactionRepo, companionRepo, walletRepo, userRepo, notifSvc)
 	mpesaWebhookHandler := handler.NewMpesaWebhookHandler(paymentRepo, interactionRepo, companionRepo, walletRepo, auditRepo, notifSvc)
 	withdrawalRepo := repository.NewWithdrawalRepository(db)
 	withdrawalHandler := handler.NewWithdrawalHandler(cfg, walletRepo, withdrawalRepo, companionRepo)
