@@ -65,6 +65,7 @@ func (h *MpesaHandler) Initiate(c *gin.Context) {
 	var req struct {
 		CompanionID       uint   `json:"companion_id" binding:"required"`
 		InteractionType   string `json:"interaction_type" binding:"required,oneof=CHAT VIDEO BOOKING"`
+		ServiceType       string `json:"service_type"` // SEX, MASSAGE, SHAVING_WAXING, etc. - actual service requested
 		AmountKES         int64  `json:"amount_kes" binding:"required,min=1"`
 		WalletAmountKES   int64  `json:"wallet_amount_kes"` // optional: use from wallet
 		CustomerPhone     string `json:"customer_phone"`
@@ -99,6 +100,10 @@ func (h *MpesaHandler) Initiate(c *gin.Context) {
 			return
 		}
 		orderID := fmt.Sprintf("lusty-w-%s", uuid.New().String())
+		walletOnlyMeta := ""
+		if req.ServiceType != "" {
+			walletOnlyMeta = fmt.Sprintf(`{"service_type":%q}`, req.ServiceType)
+		}
 		pay := &models.Payment{
 			UserID:         clientID,
 			AmountCents:    amountCents,
@@ -107,6 +112,7 @@ func (h *MpesaHandler) Initiate(c *gin.Context) {
 			ProviderRef:    orderID,
 			Status:         "COMPLETED",
 			IdempotencyKey: orderID,
+			Metadata:       walletOnlyMeta,
 		}
 		now := time.Now()
 		pay.CompletedAt = &now
@@ -172,8 +178,8 @@ func (h *MpesaHandler) Initiate(c *gin.Context) {
 	}
 	log.Printf("[MPESA] Initiate order_id=%s callback_url=%s amount_kes=%d mpesa_kes=%d", orderID, callbackURL, req.AmountKES, mpesaCents/100)
 	walletMeta := ""
-	if walletCents > 0 {
-		walletMeta = fmt.Sprintf(`{"wallet_cents":%d}`, walletCents)
+	if walletCents > 0 || req.ServiceType != "" {
+		walletMeta = fmt.Sprintf(`{"wallet_cents":%d,"service_type":%q}`, walletCents, req.ServiceType)
 	}
 	pay := &models.Payment{
 		UserID:         clientID,

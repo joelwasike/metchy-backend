@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -129,14 +130,24 @@ func (h *InteractionHandler) ListMine(c *gin.Context) {
 				clientAvatarURL = c.AvatarURL
 			}
 			paymentStatus := ""
+			requestedService := ""
 			if ir.Payment != nil {
 				paymentStatus = ir.Payment.Status
+				if ir.Payment.Metadata != "" {
+					var meta struct {
+						ServiceType string `json:"service_type"`
+					}
+					if json.Unmarshal([]byte(ir.Payment.Metadata), &meta) == nil && meta.ServiceType != "" {
+						requestedService = meta.ServiceType
+					}
+				}
 			}
 			entry := gin.H{
 				"id":                 ir.ID,
 				"client_id":          ir.ClientID,
 				"companion_id":       ir.CompanionID,
 				"interaction_type":   ir.InteractionType,
+				"requested_service":  requestedService,
 				"payment_id":         ir.PaymentID,
 				"status":             ir.Status,
 				"payment_status":     paymentStatus,

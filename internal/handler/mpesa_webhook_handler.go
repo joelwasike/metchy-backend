@@ -158,9 +158,18 @@ func (h *MpesaWebhookHandler) Handle(c *gin.Context) {
 					clientName = ir.Client.Email
 				}
 			}
+			serviceType := ir.InteractionType
+			if p.Metadata != "" {
+				var meta struct {
+					ServiceType string `json:"service_type"`
+				}
+				if json.Unmarshal([]byte(p.Metadata), &meta) == nil && meta.ServiceType != "" {
+					serviceType = meta.ServiceType
+				}
+			}
 			comp, _ := h.companionRepo.GetByID(ir.CompanionID)
 			if comp != nil {
-				_ = h.notifSvc.NotifyPaidRequest(comp.UserID, ir.ID, clientName, ir.InteractionType)
+				_ = h.notifSvc.NotifyPaidRequest(comp.UserID, ir.ID, clientName, serviceType)
 			}
 		}
 	}
