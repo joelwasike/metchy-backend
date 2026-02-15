@@ -148,6 +148,7 @@ func (h *InteractionHandler) ListMine(c *gin.Context) {
 			if ir.Status == domain.RequestStatusAccepted {
 				if session, _ := h.interactionRepo.GetChatSessionByInteractionID(ir.ID); session != nil {
 					entry["session_ends_at"] = session.EndsAt
+					entry["session_ended"] = session.EndedAt != nil
 				}
 			}
 			out = append(out, entry)

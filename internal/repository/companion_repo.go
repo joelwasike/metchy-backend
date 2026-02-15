@@ -65,6 +65,16 @@ func (r *CompanionRepository) GetPricingByID(id, companionID uint) (*models.Comp
 	return &p, nil
 }
 
+// GetPricingByCompanionAndType returns existing pricing for a companion+type, or nil if not found.
+func (r *CompanionRepository) GetPricingByCompanionAndType(companionID uint, ptype string) (*models.CompanionPricing, error) {
+	var p models.CompanionPricing
+	err := r.db.Where("companion_id = ? AND type = ?", companionID, ptype).First(&p).Error
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
 func (r *CompanionRepository) DeletePricing(id, companionID uint) error {
 	return r.db.Where("id = ? AND companion_id = ?", id, companionID).Delete(&models.CompanionPricing{}).Error
 }

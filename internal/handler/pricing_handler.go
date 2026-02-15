@@ -59,6 +59,24 @@ func (h *PricingHandler) Create(c *gin.Context) {
 	if req.Currency == "" {
 		req.Currency = "USD"
 	}
+	// Upsert: update existing pricing for this companion+type instead of creating duplicate
+	existing, _ := h.companionRepo.GetPricingByCompanionAndType(profile.ID, req.Type)
+	if existing != nil {
+		existing.AmountCents = req.AmountCents
+		if req.Unit != "" {
+			existing.Unit = req.Unit
+		}
+		if req.Currency != "" {
+			existing.Currency = req.Currency
+		}
+		existing.IsActive = true
+		if err := h.companionRepo.UpsertPricing(existing); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "update failed"})
+			return
+		}
+		c.JSON(http.StatusOK, existing)
+		return
+	}
 	p := &models.CompanionPricing{
 		CompanionID: profile.ID,
 		Type:        req.Type,
