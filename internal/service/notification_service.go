@@ -87,6 +87,21 @@ func (s *NotificationService) NotifySessionEnding(userID uint, minutesLeft int) 
 	return s.Notify(userID, "SESSION_ENDING", "Session ending", "Your session ends in a few minutes", map[string]interface{}{"minutes_left": minutesLeft})
 }
 
+// NotifyNewChatMessage sends push when the recipient is not in the chat. Skips if recipient has no FCM token.
+func (s *NotificationService) NotifyNewChatMessage(recipientUserID uint, senderName string, interactionID uint, contentPreview string) {
+	if recipientUserID == 0 {
+		return
+	}
+	body := senderName + ": " + contentPreview
+	if len(body) > 100 {
+		body = body[:97] + "..."
+	}
+	s.sendPush(recipientUserID, "NEW_MESSAGE", "New message", body, map[string]interface{}{
+		"interaction_id": interactionID,
+		"sender_name":    senderName,
+	})
+}
+
 // NotifyVideoCall sends push for incoming video call (does not save to notifications table).
 func (s *NotificationService) NotifyVideoCall(calleeUserID uint, callerName string, interactionID uint) {
 	data := map[string]interface{}{

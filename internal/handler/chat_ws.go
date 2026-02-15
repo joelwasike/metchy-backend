@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"lusty/config"
@@ -11,6 +12,7 @@ import (
 	"lusty/internal/domain"
 	"lusty/internal/models"
 	"lusty/internal/repository"
+	"lusty/internal/service"
 	"lusty/internal/ws"
 
 	"github.com/gin-gonic/gin"
@@ -30,7 +32,7 @@ var chatUpgrader = websocket.Upgrader{
 }
 
 // UpgradeChatWS upgrades to WebSocket for chat; query: token, interaction_id. User must be client or companion of that interaction; request must be accepted.
-func UpgradeChatWS(cfg *config.JWTConfig, chatHub *ws.ChatHub, interactionRepo *repository.InteractionRepository) gin.HandlerFunc {
+func UpgradeChatWS(cfg *config.JWTConfig, chatHub *ws.ChatHub, interactionRepo *repository.InteractionRepository, userRepo *repository.UserRepository, notifSvc *service.NotificationService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := c.Query("token")
 		interactionIDStr := c.Query("interaction_id")
@@ -146,6 +148,40 @@ func UpgradeChatWS(cfg *config.JWTConfig, chatHub *ws.ChatHub, interactionRepo *
 				"created_at": cm.CreatedAt,
 			}
 			room.Broadcast(client, payload)
+			// Push to recipient when they're not in app / not on chat
+			var recipientUserID uint
+			if claims.UserID == clientID {
+				recipientUserID = companionUserID
+			} else {
+				recipientUserID = clientID
+			}
+			senderName := ""
+			if claims.UserID == clientID {
+				if u, _ := userRepo.GetByID(clientID); u != nil {
+					senderName = strings.TrimSpace(u.Username)
+					if senderName == "" {
+						senderName = u.Email
+					}
+					if senderName == "" {
+						senderName = "Someone"
+					}
+				}
+			} else {
+				senderName = ir.Companion.DisplayName
+			}
+			if senderName == "" {
+				senderName = "Someone"
+			}
+			preview := strings.TrimSpace(msg.Content)
+			if msg.MediaURL != "" && preview == "" {
+				preview = "📷 Photo"
+			}
+			if strings.HasPrefix(preview, "LOCATION:") {
+				preview = "📍 Location"
+			}
+			if preview != "" && notifSvc != nil {
+				notifSvc.NotifyNewChatMessage(recipientUserID, senderName, interactionID, preview)
+			}
 		}
 	}
 }

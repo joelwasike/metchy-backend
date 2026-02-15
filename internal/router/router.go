@@ -157,7 +157,7 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 	}
 
 	r.GET("/ws/map", ws.UpgradeMapWS(&cfg.JWT, mapHub))
-	r.GET("/ws/chat", handler.UpgradeChatWS(&cfg.JWT, chatHub, interactionRepo))
+	r.GET("/ws/chat", handler.UpgradeChatWS(&cfg.JWT, chatHub, interactionRepo, userRepo, notifSvc))
 	r.GET("/ws/video", handler.UpgradeVideoWS(&cfg.JWT, videoHub, interactionRepo))
 
 	return r
