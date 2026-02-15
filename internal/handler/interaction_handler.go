@@ -128,6 +128,10 @@ func (h *InteractionHandler) ListMine(c *gin.Context) {
 				}
 				clientAvatarURL = c.AvatarURL
 			}
+			paymentStatus := ""
+			if ir.Payment != nil {
+				paymentStatus = ir.Payment.Status
+			}
 			entry := gin.H{
 				"id":                 ir.ID,
 				"client_id":          ir.ClientID,
@@ -135,6 +139,7 @@ func (h *InteractionHandler) ListMine(c *gin.Context) {
 				"interaction_type":   ir.InteractionType,
 				"payment_id":         ir.PaymentID,
 				"status":             ir.Status,
+				"payment_status":     paymentStatus,
 				"duration_minutes":   ir.DurationMinutes,
 				"created_at":         ir.CreatedAt,
 				"client":             gin.H{"username": clientDisplay, "email": clientDisplay, "avatar_url": clientAvatarURL},
