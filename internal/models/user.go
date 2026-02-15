@@ -19,6 +19,7 @@ type User struct {
 	GoogleID          *string        `gorm:"uniqueIndex;size:255" json:"-"` // nil for email signups (avoids duplicate '' on unique index)
 	AvatarURL         string         `gorm:"size:512" json:"avatar_url"`
 	SearchRadiusKm    float64        `gorm:"default:10" json:"search_radius_km"` // Client: max search radius (default 10km)
+	KYC               bool           `gorm:"default:false" json:"kyc"`
 	CreatedAt         time.Time      `json:"created_at"`
 	UpdatedAt         time.Time      `json:"updated_at"`
 	DeletedAt         gorm.DeletedAt `gorm:"index" json:"-"`

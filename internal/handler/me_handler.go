@@ -60,6 +60,7 @@ func (h *MeHandler) GetProfile(c *gin.Context) {
 		"date_of_birth":     u.DateOfBirth,
 		"avatar_url":        u.AvatarURL,
 		"search_radius_km":   u.SearchRadiusKm,
+		"kyc":               u.KYC,
 		"profile_complete":  true,
 		"needs_onboarding":   false,
 	}
