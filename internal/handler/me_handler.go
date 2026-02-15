@@ -41,6 +41,29 @@ func NewMeHandler(
 	}
 }
 
+// RegisterFCMToken saves the FCM token for push notifications.
+func (h *MeHandler) RegisterFCMToken(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	u, err := h.userRepo.GetByID(userID)
+	if err != nil || u == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+	var req struct {
+		Token string `json:"token" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "token required"})
+		return
+	}
+	u.FCMToken = req.Token
+	if err := h.userRepo.Update(u); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "update failed"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
 // GetProfile returns the current user with profile completeness for redirect logic.
 func (h *MeHandler) GetProfile(c *gin.Context) {
 	userID := middleware.GetUserID(c)

@@ -14,6 +14,11 @@ type Config struct {
 	Location     LocationConfig
 	Payment      PaymentConfig
 	LiberecMpesa LiberecMpesaConfig
+	Firebase     FirebaseConfig
+}
+
+type FirebaseConfig struct {
+	ServiceAccountPath string // Path to Firebase service account JSON (optional - if empty, FCM is disabled)
 }
 
 type ServerConfig struct {
@@ -108,6 +113,9 @@ func Load() *Config {
 		Payment: PaymentConfig{
 			WebhookSecret: "",
 			PaymentExpiry: 30 * time.Minute,
+		},
+		Firebase: FirebaseConfig{
+			ServiceAccountPath: os.Getenv("FIREBASE_SERVICE_ACCOUNT_PATH"), // e.g. /path/to/serviceAccountKey.json
 		},
 		LiberecMpesa: func() LiberecMpesaConfig {
 			webhookBase := "https://metchi.theliberec.com"

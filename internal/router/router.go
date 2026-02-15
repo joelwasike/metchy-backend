@@ -1,6 +1,7 @@
 package router
 
 import (
+	"log"
 	"time"
 
 	"lusty/config"
@@ -45,7 +46,15 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 
 	// Services
 	authSvc := service.NewAuthService(cfg, userRepo)
-	notifSvc := service.NewNotificationService(notificationRepo)
+	fcmSvc := service.NewFCMService(cfg.Firebase.ServiceAccountPath)
+	if fcmSvc != nil {
+		log.Printf("[FCM] Push notifications enabled")
+	} else if cfg.Firebase.ServiceAccountPath != "" {
+		log.Printf("[FCM] Push notifications disabled: failed to init (check service account file)")
+	} else {
+		log.Printf("[FCM] Push notifications disabled: set FIREBASE_SERVICE_ACCOUNT_PATH to enable")
+	}
+	notifSvc := service.NewNotificationService(notificationRepo, userRepo, fcmSvc)
 
 	// Handlers
 	authHandler := handler.NewAuthHandler(authSvc, presenceRepo, auditRepo, companionRepo)
@@ -117,6 +126,8 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 			meAdult.GET("/interactions/:interaction_id/messages", chatHandler.GetMessages)
 			meAdult.GET("/interactions/:interaction_id/distance", distanceHandler.GetDistance)
 			meAdult.POST("/upload/chat", uploadHandler.UploadChatMedia)
+			meAdult.POST("/fcm-token", meHandler.RegisterFCMToken)
+			meAdult.POST("/interactions/:interaction_id/video-call-request", interactionHandler.VideoCallRequest)
 		}
 		api.POST("/payments/mpesa/initiate", authMw, adultMw, mpesaHandler.Initiate)
 		api.POST("/interactions", authMw, adultMw, interactionHandler.Create)

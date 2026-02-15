@@ -89,7 +89,7 @@ func UpgradeVideoWS(cfg *config.JWTConfig, videoHub *ws.VideoHub, interactionRep
 				continue
 			}
 			switch msg.Type {
-			case "offer", "answer", "ice":
+			case "offer", "answer", "ice", "ready":
 				room.SendToOther(claims.UserID, map[string]interface{}{"type": msg.Type, "payload": msg.Payload})
 			}
 		}

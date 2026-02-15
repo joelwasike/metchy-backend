@@ -328,3 +328,48 @@ func (h *InteractionHandler) ServiceDone(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Service confirmed. Companion can now withdraw."})
 }
+
+// VideoCallRequest is called when a user initiates a video call. Sends push to the other party.
+func (h *InteractionHandler) VideoCallRequest(c *gin.Context) {
+	callerID := middleware.GetUserID(c)
+	interactionIDStr := c.Param("interaction_id")
+	interactionID, err := strconv.ParseUint(interactionIDStr, 10, 64)
+	if err != nil || interactionID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid interaction_id"})
+		return
+	}
+	ir, err := h.interactionRepo.GetByID(uint(interactionID))
+	if err != nil || ir == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "interaction not found"})
+		return
+	}
+	if ir.Status != domain.RequestStatusAccepted {
+		c.JSON(http.StatusForbidden, gin.H{"error": "interaction not accepted"})
+		return
+	}
+	// Determine callee: if caller is client, callee is companion; else callee is client
+	var calleeUserID uint
+	var callerName string
+	if ir.ClientID == callerID {
+		calleeUserID = ir.Companion.UserID
+		callerName = "A client"
+		if u, _ := h.userRepo.GetByID(callerID); u != nil {
+			if u.Username != "" {
+				callerName = u.Username
+			} else {
+				callerName = u.Email
+			}
+		}
+	} else if ir.Companion.UserID == callerID {
+		calleeUserID = ir.ClientID
+		callerName = ir.Companion.DisplayName
+		if callerName == "" {
+			callerName = "A companion"
+		}
+	} else {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not part of this interaction"})
+		return
+	}
+	h.notifSvc.NotifyVideoCall(calleeUserID, callerName, ir.ID)
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Call request sent"})
+}

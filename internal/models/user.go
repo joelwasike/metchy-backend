@@ -20,6 +20,7 @@ type User struct {
 	AvatarURL         string         `gorm:"size:512" json:"avatar_url"`
 	SearchRadiusKm    float64        `gorm:"default:10" json:"search_radius_km"` // Client: max search radius (default 10km)
 	KYC               bool           `gorm:"default:false" json:"kyc"`
+	FCMToken          string         `gorm:"size:512" json:"-"` // For push notifications
 	CreatedAt         time.Time      `json:"created_at"`
 	UpdatedAt         time.Time      `json:"updated_at"`
 	DeletedAt         gorm.DeletedAt `gorm:"index" json:"-"`
