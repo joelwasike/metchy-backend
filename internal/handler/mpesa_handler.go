@@ -65,7 +65,7 @@ func (h *MpesaHandler) Initiate(c *gin.Context) {
 	var req struct {
 		CompanionID       uint   `json:"companion_id" binding:"required"`
 		InteractionType   string `json:"interaction_type" binding:"required,oneof=CHAT VIDEO BOOKING"`
-		ServiceType       string `json:"service_type"` // SEX, MASSAGE, SHAVING_WAXING, etc. - actual service requested
+		ServiceType       string `json:"service_type"` // HOOKUP/SEX, MASSAGE, NUDE_VIDEO_CALL, SHAVING_WAXING, etc.
 		AmountKES         int64  `json:"amount_kes" binding:"required,min=1"`
 		WalletAmountKES   int64  `json:"wallet_amount_kes"` // optional: use from wallet
 		CustomerPhone     string `json:"customer_phone"`

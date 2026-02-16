@@ -49,8 +49,8 @@ func (h *PricingHandler) Create(c *gin.Context) {
 	}
 	allowedTypes := map[string]bool{
 		"CHAT_ACCESS": true, "VIDEO_PER_5MIN": true, "BOOKING_FEE": true,
-		"SEX": true, "MASSAGE": true, "THREESOME": true, "BJ_HANDJOB": true,
-		"SHAVING_WAXING": true, "LAPDANCE": true, "OTHER": true,
+		"SEX": true, "HOOKUP": true, "MASSAGE": true, "NUDE_VIDEO_CALL": true,
+		"THREESOME": true, "BJ_HANDJOB": true, "SHAVING_WAXING": true, "LAPDANCE": true, "OTHER": true,
 	}
 	if !allowedTypes[req.Type] {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid pricing type"})
