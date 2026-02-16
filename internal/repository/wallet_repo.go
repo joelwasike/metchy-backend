@@ -47,6 +47,16 @@ func (r *WalletRepository) Credit(userID uint, amountCents int64) error {
 	return r.db.Model(w).Update("balance_cents", w.BalanceCents).Error
 }
 
+func (r *WalletRepository) RecordTransaction(userID uint, amountCents int64, txType, reference string) error {
+	return r.db.Create(&models.WalletTransaction{UserID: userID, AmountCents: amountCents, Type: txType, Reference: reference}).Error
+}
+
+func (r *WalletRepository) ListTransactionsByUserID(userID uint, limit, offset int) ([]models.WalletTransaction, error) {
+	var list []models.WalletTransaction
+	err := r.db.Where("user_id = ?", userID).Order("created_at DESC").Limit(limit).Offset(offset).Find(&list).Error
+	return list, err
+}
+
 // DebitWithdrawable deducts from withdrawable (when initiating withdrawal).
 func (r *WalletRepository) DebitWithdrawable(userID uint, amountCents int64) error {
 	w, err := r.GetByUserID(userID)
@@ -57,7 +67,10 @@ func (r *WalletRepository) DebitWithdrawable(userID uint, amountCents int64) err
 		return ErrInsufficientBalance
 	}
 	w.WithdrawableCents -= amountCents
-	return r.db.Model(w).Update("withdrawable_cents", w.WithdrawableCents).Error
+	if err := r.db.Model(w).Update("withdrawable_cents", w.WithdrawableCents).Error; err != nil {
+		return err
+	}
+	return r.RecordTransaction(userID, -amountCents, "WITHDRAWAL", "")
 }
 
 // CreditWithdrawable adds to companion's withdrawable balance (when service is confirmed done).
@@ -79,5 +92,8 @@ func (r *WalletRepository) Debit(userID uint, amountCents int64) error {
 		return ErrInsufficientBalance
 	}
 	w.BalanceCents -= amountCents
-	return r.db.Model(w).Update("balance_cents", w.BalanceCents).Error
+	if err := r.db.Model(w).Update("balance_cents", w.BalanceCents).Error; err != nil {
+		return err
+	}
+	return r.RecordTransaction(userID, -amountCents, "DEBIT", "")
 }

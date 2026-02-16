@@ -261,3 +261,73 @@ func (h *MpesaHandler) Initiate(c *gin.Context) {
 		"message":             msg,
 	})
 }
+
+// InitiateBoost starts M-Pesa payment for companion boost (1000 KES, 24h). Companion only.
+func (h *MpesaHandler) InitiateBoost(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	profile, err := h.companionRepo.GetByUserID(userID)
+	if err != nil || profile == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "companion profile required"})
+		return
+	}
+	var req struct {
+		AmountKES         int64  `json:"amount_kes"` // default 1000
+		CustomerPhone     string `json:"customer_phone" binding:"required"`
+		CustomerFirstName string `json:"customer_first_name" binding:"required"`
+		CustomerLastName  string `json:"customer_last_name" binding:"required"`
+		CustomerEmail     string `json:"customer_email" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "customer_phone, customer_first_name, customer_last_name, customer_email required"})
+		return
+	}
+	if req.AmountKES <= 0 {
+		req.AmountKES = 1000
+	}
+	amountCents := req.AmountKES * 100
+	orderID := fmt.Sprintf("lusty-boost-%s", uuid.New().String())
+	callbackURL := ""
+	if h.cfg.LiberecMpesa.WebhookBaseURL != "" {
+		callbackURL = h.cfg.LiberecMpesa.WebhookBaseURL + "/api/v1/webhooks/mpesa"
+	}
+	pay := &models.Payment{
+		UserID:         userID,
+		AmountCents:    amountCents,
+		Currency:       "KES",
+		Provider:       "mpesa_liberec",
+		ProviderRef:    orderID,
+		Status:         "PENDING",
+		IdempotencyKey: orderID,
+		Metadata:       `{"type":"BOOST"}`,
+	}
+	if err := h.paymentRepo.Create(pay); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "payment create failed"})
+		return
+	}
+	stkReq := payment.PaymentRequest{
+		UserID:            userID,
+		AmountCents:       amountCents,
+		Currency:          "KES",
+		OrderID:           orderID,
+		CustomerPhone:     req.CustomerPhone,
+		CustomerFirstName: req.CustomerFirstName,
+		CustomerLastName:  req.CustomerLastName,
+		CustomerEmail:     req.CustomerEmail,
+		CallbackURL:       callbackURL,
+		Description:       "Boost your profile (24h)",
+	}
+	resp, err := h.mpesaProvider.InitiatePayment(c.Request.Context(), stkReq)
+	if err != nil {
+		log.Printf("[MPESA Boost] InitiatePayment error: %v", err)
+		h.paymentRepo.Update(&models.Payment{ID: pay.ID, Status: "FAILED"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "mpesa init failed: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{
+		"order_id":            orderID,
+		"checkout_request_id": resp.CheckoutRequestID,
+		"status":              resp.Status,
+		"amount_kes":          req.AmountKES,
+		"message":             "Check your phone to complete M-Pesa payment. Boost lasts 24 hours.",
+	})
+}

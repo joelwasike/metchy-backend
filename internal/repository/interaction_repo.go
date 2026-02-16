@@ -1,6 +1,9 @@
 package repository
 
 import (
+	"encoding/json"
+	"time"
+
 	"lusty/internal/models"
 
 	"gorm.io/gorm"
@@ -123,6 +126,72 @@ func (r *InteractionRepository) CountActiveSessionsByCompanionID(companionID uin
 		Where("ir.companion_id = ? AND cs.deleted_at IS NULL AND cs.ended_at IS NULL AND cs.ends_at > NOW()", companionID).
 		Count(&c).Error
 	return c, err
+}
+
+// ActiveSessionRow is a row for companion active sessions list.
+type ActiveSessionRow struct {
+	InteractionID   uint
+	ClientName      string
+	ServiceType     string
+	DurationMinutes int
+	StartedAt       time.Time
+	EndsAt          time.Time
+}
+
+// ListActiveSessionsByCompanionID returns active chat sessions for the companion with client name, service type, duration.
+func (r *InteractionRepository) ListActiveSessionsByCompanionID(companionID uint, limit int) ([]ActiveSessionRow, error) {
+	var list []struct {
+		ID               uint
+		ClientID         uint
+		InteractionType  string
+		DurationMinutes  int
+		StartedAt        time.Time
+		EndsAt           time.Time
+		Username         string
+		Email            string
+		PaymentMetadata  string
+	}
+	err := r.db.Table("interaction_requests ir").
+		Select("ir.id, ir.client_id, ir.interaction_type, ir.duration_minutes, cs.started_at, cs.ends_at, u.username, u.email, p.metadata as payment_metadata").
+		Joins("INNER JOIN chat_sessions cs ON cs.interaction_id = ir.id AND cs.deleted_at IS NULL AND cs.ended_at IS NULL AND cs.ends_at > NOW()").
+		Joins("INNER JOIN users u ON u.id = ir.client_id").
+		Joins("LEFT JOIN payments p ON p.id = ir.payment_id AND p.deleted_at IS NULL").
+		Where("ir.companion_id = ? AND ir.status = ? AND ir.deleted_at IS NULL", companionID, "ACCEPTED").
+		Order("cs.started_at DESC").
+		Limit(limit).
+		Scan(&list).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ActiveSessionRow, 0, len(list))
+	for _, row := range list {
+		clientName := row.Username
+		if clientName == "" {
+			clientName = row.Email
+		}
+		if clientName == "" {
+			clientName = "Client"
+		}
+		svcType := row.InteractionType
+		if row.PaymentMetadata != "" {
+			var meta struct {
+				ServiceType string `json:"service_type"`
+			}
+			_ = json.Unmarshal([]byte(row.PaymentMetadata), &meta)
+			if meta.ServiceType != "" {
+				svcType = meta.ServiceType
+			}
+		}
+		out = append(out, ActiveSessionRow{
+			InteractionID:   row.ID,
+			ClientName:      clientName,
+			ServiceType:     svcType,
+			DurationMinutes: row.DurationMinutes,
+			StartedAt:       row.StartedAt,
+			EndsAt:          row.EndsAt,
+		})
+	}
+	return out, nil
 }
 
 // ClientHasActiveSessionWithOtherCompanion returns true if the client has an active chat session

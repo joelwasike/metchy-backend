@@ -235,6 +235,64 @@ func (h *MeHandler) GetDashboard(c *gin.Context) {
 	})
 }
 
+// GetActiveSessions returns active chat sessions for the companion (service type, duration, client name).
+func (h *MeHandler) GetActiveSessions(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	role, _ := c.Get("role")
+	if roleStr, _ := role.(string); roleStr != domain.RoleCompanion {
+		c.JSON(http.StatusForbidden, gin.H{"error": "companion only"})
+		return
+	}
+	profile, err := h.companionRepo.GetByUserID(userID)
+	if err != nil || profile == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "companion profile required"})
+		return
+	}
+	list, err := h.interactionRepo.ListActiveSessionsByCompanionID(profile.ID, 50)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load sessions"})
+		return
+	}
+	out := make([]gin.H, 0, len(list))
+	for _, row := range list {
+		out = append(out, gin.H{
+			"interaction_id":    row.InteractionID,
+			"client_name":       row.ClientName,
+			"service_type":      row.ServiceType,
+			"duration_minutes":  row.DurationMinutes,
+			"started_at":        row.StartedAt.Format(time.RFC3339),
+			"ends_at":           row.EndsAt.Format(time.RFC3339),
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"sessions": out})
+}
+
+// GetFans returns clients who favorited this companion (names only).
+func (h *MeHandler) GetFans(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	role, _ := c.Get("role")
+	if roleStr, _ := role.(string); roleStr != domain.RoleCompanion {
+		c.JSON(http.StatusForbidden, gin.H{"error": "companion only"})
+		return
+	}
+	profile, err := h.companionRepo.GetByUserID(userID)
+	if err != nil || profile == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "companion profile required"})
+		return
+	}
+	limit, offset := 50, 0
+	list, err := h.favRepo.ListFansByCompanionID(profile.ID, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load fans"})
+		return
+	}
+	out := make([]gin.H, 0, len(list))
+	for _, e := range list {
+		out = append(out, gin.H{"client_id": e.ClientID, "name": e.Name})
+	}
+	c.JSON(http.StatusOK, gin.H{"fans": out})
+}
+
 // CompleteOnboarding marks companion onboarding as complete. Optional date_of_birth for Google signups.
 func (h *MeHandler) CompleteOnboarding(c *gin.Context) {
 	userID := middleware.GetUserID(c)

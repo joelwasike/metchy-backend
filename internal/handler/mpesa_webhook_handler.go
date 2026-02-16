@@ -139,6 +139,31 @@ func (h *MpesaWebhookHandler) Handle(c *gin.Context) {
 		UserAgent:  c.Request.UserAgent(),
 	})
 
+	// Boost payment: no interaction, create CompanionBoost for 24h
+	var meta struct {
+		Type string `json:"type"`
+	}
+	if p.Metadata != "" {
+		_ = json.Unmarshal([]byte(p.Metadata), &meta)
+	}
+	if meta.Type == "BOOST" {
+		profile, _ := h.companionRepo.GetByUserID(p.UserID)
+		if profile != nil {
+			boostEnd := now.Add(24 * time.Hour)
+			b := &models.CompanionBoost{
+				CompanionID: profile.ID,
+				BoostType:   "24h",
+				StartAt:     now,
+				EndAt:       boostEnd,
+				IsActive:    true,
+			}
+			_ = h.companionRepo.CreateBoost(b)
+			log.Printf("[MPESA callback] boost activated for companion %d (payment %d)", profile.ID, p.ID)
+		}
+		c.JSON(http.StatusOK, gin.H{"received": true})
+		return
+	}
+
 	// Payment confirmed. Companion must explicitly accept before chat unlocks.
 	// If companion already rejected: refund client's wallet.
 	ir, err := h.interactionRepo.GetByPaymentID(p.ID)

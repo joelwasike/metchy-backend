@@ -41,6 +41,33 @@ func (r *FavoriteRepository) ListClientIDsByCompanionID(companionID uint) ([]uin
 	return ids, err
 }
 
+// FanEntry is a client who favorited the companion (name for display).
+type FanEntry struct {
+	ClientID uint   `json:"client_id"`
+	Name     string `json:"name"`
+}
+
+// ListFansByCompanionID returns clients who favorited this companion with their display name (username or email).
+func (r *FavoriteRepository) ListFansByCompanionID(companionID uint, limit, offset int) ([]FanEntry, error) {
+	var list []models.Favorite
+	err := r.db.Where("companion_id = ?", companionID).Preload("Client").Order("created_at DESC").Limit(limit).Offset(offset).Find(&list).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make([]FanEntry, 0, len(list))
+	for _, f := range list {
+		name := f.Client.Username
+		if name == "" {
+			name = f.Client.Email
+		}
+		if name == "" {
+			name = "Someone"
+		}
+		out = append(out, FanEntry{ClientID: f.ClientID, Name: name})
+	}
+	return out, nil
+}
+
 func (r *FavoriteRepository) CountByCompanionID(companionID uint) (int64, error) {
 	var c int64
 	err := r.db.Model(&models.Favorite{}).Where("companion_id = ?", companionID).Count(&c).Error

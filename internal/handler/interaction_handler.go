@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -324,6 +325,7 @@ func (h *InteractionHandler) ServiceDone(c *gin.Context) {
 		comp, _ := h.companionRepo.GetByID(ir.CompanionID)
 		if comp != nil {
 			_ = h.walletRepo.CreditWithdrawable(comp.UserID, ir.Payment.AmountCents)
+			_ = h.walletRepo.RecordTransaction(comp.UserID, ir.Payment.AmountCents, "EARNING", fmt.Sprintf("%d", ir.ID))
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Service confirmed. Companion can now withdraw."})
