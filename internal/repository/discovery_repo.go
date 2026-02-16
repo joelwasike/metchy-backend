@@ -35,6 +35,7 @@ type DiscoveryResult struct {
 	IsOnline         bool
 	LastSeenAt       time.Time
 	IsBoosted        bool
+	IsAvailable      bool // companion's manual "available" toggle
 }
 
 // DiscoveryRepository performs location-based companion discovery.
@@ -61,7 +62,7 @@ func (r *DiscoveryRepository) DiscoverCompanions(f DiscoveryFilters) ([]Discover
 	query := r.db.Table("companion_profiles cp").
 		Select(`
 			cp.id as companion_id, cp.user_id, cp.display_name, cp.bio, cp.main_profile_image_url,
-			cp.city_or_area, cp.is_active,
+			cp.city_or_area, cp.is_active, COALESCE(cp.is_available, 1) as is_available,
 			u.date_of_birth,
 			ul.latitude, ul.longitude,
 			up.is_online, up.last_seen_at,
@@ -91,19 +92,20 @@ func (r *DiscoveryRepository) DiscoverCompanions(f DiscoveryFilters) ([]Discover
 
 	// Subquery to compute distance and filter by Haversine in app (or raw SQL with formula)
 	var rows []struct {
-		CompanionID uint
-		UserID      uint
-		DisplayName string
-		Bio         string
+		CompanionID       uint
+		UserID            uint
+		DisplayName       string
+		Bio               string
 		MainProfileImageURL string
-		CityOrArea  string
-		IsActive    bool
-		Latitude    float64
-		Longitude   float64
-		IsOnline    bool
-		LastSeenAt  *time.Time
-		BoostID     *uint
-		DateOfBirth *time.Time
+		CityOrArea        string
+		IsActive          bool
+		IsAvailable       bool
+		Latitude          float64
+		Longitude         float64
+		IsOnline          bool
+		LastSeenAt        *time.Time
+		BoostID           *uint
+		DateOfBirth       *time.Time
 	}
 
 	err := query.Scan(&rows).Error
@@ -145,13 +147,15 @@ func (r *DiscoveryRepository) DiscoverCompanions(f DiscoveryFilters) ([]Discover
 				MainProfileImageURL:  row.MainProfileImageURL,
 				CityOrArea:          row.CityOrArea,
 				IsActive:            row.IsActive,
+				IsAvailable:          row.IsAvailable,
 			},
-			User:       models.User{ID: row.UserID, DateOfBirth: row.DateOfBirth},
-			DistanceKm: distKm,
-			Age:        age,
-			IsOnline:   row.IsOnline,
-			LastSeenAt: lastSeen,
-			IsBoosted:  row.BoostID != nil,
+			User:        models.User{ID: row.UserID, DateOfBirth: row.DateOfBirth},
+			DistanceKm:  distKm,
+			Age:         age,
+			IsOnline:    row.IsOnline,
+			LastSeenAt:  lastSeen,
+			IsBoosted:   row.BoostID != nil,
+			IsAvailable: row.IsAvailable,
 		})
 	}
 
@@ -195,7 +199,7 @@ func (r *DiscoveryRepository) DiscoverCompanionsFallback(f DiscoveryFilters) ([]
 	query := r.db.Table("companion_profiles cp").
 		Select(`
 			cp.id as companion_id, cp.user_id, cp.display_name, cp.bio, cp.main_profile_image_url,
-			cp.city_or_area, cp.is_active,
+			cp.city_or_area, cp.is_active, COALESCE(cp.is_available, 1) as is_available,
 			u.date_of_birth,
 			0.0 as latitude, 0.0 as longitude,
 			up.is_online, up.last_seen_at,
@@ -224,6 +228,7 @@ func (r *DiscoveryRepository) DiscoverCompanionsFallback(f DiscoveryFilters) ([]
 		MainProfileImageURL string
 		CityOrArea        string
 		IsActive          bool
+		IsAvailable       bool
 		Latitude          float64
 		Longitude         float64
 		IsOnline          bool
@@ -266,13 +271,15 @@ func (r *DiscoveryRepository) DiscoverCompanionsFallback(f DiscoveryFilters) ([]
 				MainProfileImageURL: row.MainProfileImageURL,
 				CityOrArea:         row.CityOrArea,
 				IsActive:           row.IsActive,
+				IsAvailable:        row.IsAvailable,
 			},
-			User:       models.User{ID: row.UserID, DateOfBirth: row.DateOfBirth},
-			DistanceKm: -1, // Unknown - companion has no location
-			Age:        age,
-			IsOnline:   row.IsOnline,
-			LastSeenAt: lastSeen,
-			IsBoosted:  row.BoostID != nil,
+			User:        models.User{ID: row.UserID, DateOfBirth: row.DateOfBirth},
+			DistanceKm:  -1, // Unknown - companion has no location
+			Age:         age,
+			IsOnline:    row.IsOnline,
+			LastSeenAt:  lastSeen,
+			IsBoosted:   row.BoostID != nil,
+			IsAvailable: row.IsAvailable,
 		})
 	}
 

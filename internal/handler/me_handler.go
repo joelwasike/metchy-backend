@@ -130,6 +130,7 @@ func (h *MeHandler) UpdateSettings(c *gin.Context) {
 		AppearInSearch    *bool    `json:"appear_in_search"`
 		AcceptNewRequests *bool    `json:"accept_new_requests"`
 		IsLocationVisible *bool    `json:"is_location_visible"`
+		Available         *bool    `json:"available"` // companion: manual "I'm available" toggle
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -171,6 +172,9 @@ func (h *MeHandler) UpdateSettings(c *gin.Context) {
 		}
 		if req.AcceptNewRequests != nil {
 			profile.AcceptNewRequests = *req.AcceptNewRequests
+		}
+		if req.Available != nil {
+			profile.IsAvailable = *req.Available
 		}
 		if req.IsLocationVisible != nil {
 			loc, _ := h.locRepo.GetByUserID(userID)
@@ -225,13 +229,18 @@ func (h *MeHandler) GetDashboard(c *gin.Context) {
 	// Active sessions (accepted, session not ended)
 	activeSessions, _ := h.interactionRepo.CountActiveSessionsByCompanionID(profile.ID)
 
+	// Pending requests count (for badge)
+	pendingRequests, _ := h.interactionRepo.CountPendingByCompanionID(profile.ID)
+
 	c.JSON(http.StatusOK, gin.H{
-		"earnings_cents":      balanceCents,
-		"withdrawable_cents":  withdrawableCents,
-		"is_boosted":          boost != nil,
-		"boost_ends_at":       boostEndsAt,
-		"favorites_count":    favCount,
-		"active_sessions":     activeSessions,
+		"earnings_cents":        balanceCents,
+		"withdrawable_cents":    withdrawableCents,
+		"is_boosted":            boost != nil,
+		"boost_ends_at":         boostEndsAt,
+		"favorites_count":      favCount,
+		"active_sessions":      activeSessions,
+		"pending_requests":     pendingRequests,
+		"is_available":         profile.IsAvailable,
 	})
 }
 

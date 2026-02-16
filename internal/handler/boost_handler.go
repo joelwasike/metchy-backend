@@ -16,6 +16,7 @@ var boostDurations = map[string]time.Duration{
 	"1h":   1 * time.Hour,
 	"24h":  24 * time.Hour,
 	"72h":  72 * time.Hour,
+	"30d":  30 * 24 * time.Hour, // 1 month
 }
 
 type BoostHandler struct {
@@ -35,7 +36,7 @@ func (h *BoostHandler) Activate(c *gin.Context) {
 		return
 	}
 	var req struct {
-		BoostType        string `json:"boost_type" binding:"required"` // 1h, 24h, 72h
+		BoostType        string `json:"boost_type" binding:"required"` // 1h, 24h, 72h, 30d
 		PaymentReference string `json:"payment_reference"`              // optional; verify via payment provider
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -44,7 +45,7 @@ func (h *BoostHandler) Activate(c *gin.Context) {
 	}
 	dur, ok := boostDurations[req.BoostType]
 	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid boost_type (use 1h, 24h, 72h)"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid boost_type (use 1h, 24h, 72h, 30d)"})
 		return
 	}
 	now := time.Now()

@@ -40,6 +40,21 @@ func (r *InteractionRepository) ListPendingForCompanion(companionID uint, limit 
 	return list, err
 }
 
+// CountPendingByCompanionID returns the number of PENDING requests for the companion (for badge).
+func (r *InteractionRepository) CountPendingByCompanionID(companionID uint) (int64, error) {
+	var c int64
+	err := r.db.Model(&models.InteractionRequest{}).Where("companion_id = ? AND status = ?", companionID, "PENDING").Count(&c).Error
+	return c, err
+}
+
+// RejectOtherPendingByCompanionID sets all other PENDING requests for this companion to REJECTED (except exceptInteractionID).
+// Call after companion accepts one request so others are auto-removed.
+func (r *InteractionRepository) RejectOtherPendingByCompanionID(companionID, exceptInteractionID uint) error {
+	return r.db.Model(&models.InteractionRequest{}).
+		Where("companion_id = ? AND status = ? AND id != ?", companionID, "PENDING", exceptInteractionID).
+		Updates(map[string]interface{}{"status": "REJECTED", "rejected_at": time.Now()}).Error
+}
+
 func (r *InteractionRepository) ListByClientID(clientID uint, limit, offset int) ([]models.InteractionRequest, error) {
 	var list []models.InteractionRequest
 	err := r.db.Where("client_id = ?", clientID).Preload("Companion").Limit(limit).Offset(offset).Order("created_at DESC").Find(&list).Error

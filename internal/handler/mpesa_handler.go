@@ -262,7 +262,7 @@ func (h *MpesaHandler) Initiate(c *gin.Context) {
 	})
 }
 
-// InitiateBoost starts M-Pesa payment for companion boost (1000 KES, 24h). Companion only.
+// InitiateBoost starts M-Pesa payment for companion boost (1000 KES, 1 month). Companion only.
 func (h *MpesaHandler) InitiateBoost(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	profile, err := h.companionRepo.GetByUserID(userID)
@@ -314,7 +314,7 @@ func (h *MpesaHandler) InitiateBoost(c *gin.Context) {
 		CustomerLastName:  req.CustomerLastName,
 		CustomerEmail:     req.CustomerEmail,
 		CallbackURL:       callbackURL,
-		Description:       "Boost your profile (24h)",
+		Description:       "Boost your profile (1 month)",
 	}
 	resp, err := h.mpesaProvider.InitiatePayment(c.Request.Context(), stkReq)
 	if err != nil {
@@ -328,6 +328,6 @@ func (h *MpesaHandler) InitiateBoost(c *gin.Context) {
 		"checkout_request_id": resp.CheckoutRequestID,
 		"status":              resp.Status,
 		"amount_kes":          req.AmountKES,
-		"message":             "Check your phone to complete M-Pesa payment. Boost lasts 24 hours.",
+		"message":             "Check your phone to complete M-Pesa payment. Boost lasts 1 month.",
 	})
 }

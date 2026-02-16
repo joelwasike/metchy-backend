@@ -20,6 +20,7 @@ type CompanionProfile struct {
 	IsActive          bool           `gorm:"default:true;index" json:"is_active"`
 	AppearInSearch    bool           `gorm:"default:true;index" json:"appear_in_search"`
 	AcceptNewRequests bool           `gorm:"default:true" json:"accept_new_requests"`
+	IsAvailable       bool           `gorm:"default:true;index" json:"is_available"` // manual toggle; set false when companion accepts a request
 	OnboardingCompletedAt *time.Time `json:"onboarding_completed_at"` // nil = needs onboarding
 	CreatedAt         time.Time      `json:"created_at"`
 	UpdatedAt         time.Time      `json:"updated_at"`

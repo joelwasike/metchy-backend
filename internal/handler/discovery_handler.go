@@ -107,6 +107,7 @@ func (h *DiscoveryHandler) Discover(c *gin.Context) {
 			"is_online":          r.IsOnline,
 			"last_seen_at":       r.LastSeenAt,
 			"is_boosted":         r.IsBoosted,
+			"is_available":       r.IsAvailable,
 		}
 		if r.DistanceKm >= 0 {
 			progress := proximity.Progress(r.DistanceKm, radiusKm)

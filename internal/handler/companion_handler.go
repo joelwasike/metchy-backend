@@ -42,10 +42,9 @@ func (h *CompanionHandler) GetProfile(c *gin.Context) {
 		if roleStr, _ := role.(string); roleStr == "CLIENT" && userID != 0 {
 			profMap, _ := toMap(profile)
 			if profMap != nil {
-				// Availability: companion is "available" when they have no active sessions
-				activeSessions, _ := h.interactionRepo.CountActiveSessionsByCompanionID(uint(id))
-				profMap["is_available"] = activeSessions == 0
-				profMap["availability_status"] = map[bool]string{true: "AVAILABLE", false: "NOT_AVAILABLE"}[activeSessions == 0]
+				// Availability: manual toggle (companion sets; auto-off when she accepts a request)
+				profMap["is_available"] = profile.IsAvailable
+				profMap["availability_status"] = map[bool]string{true: "AVAILABLE", false: "NOT_AVAILABLE"}[profile.IsAvailable]
 
 				// Interested button: inactive only when client has active chat with another companion
 				clientBusy, _ := h.interactionRepo.ClientHasActiveSessionWithOtherCompanion(userID, uint(id))

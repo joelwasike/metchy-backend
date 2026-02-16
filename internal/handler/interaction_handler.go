@@ -247,6 +247,11 @@ func (h *InteractionHandler) Accept(c *gin.Context) {
 	// Credit companion's wallet (withdrawable after client confirms service done)
 	_ = h.walletRepo.Credit(profile.UserID, ir.Payment.AmountCents)
 	_ = h.notifSvc.NotifyAccepted(ir.ClientID, profile.DisplayName, ir.ID)
+	// Auto-remove other pending requests when companion accepts one
+	_ = h.interactionRepo.RejectOtherPendingByCompanionID(profile.ID, ir.ID)
+	// Mark companion as not available until she toggles back on
+	profile.IsAvailable = false
+	_ = h.companionRepo.Update(profile)
 	c.JSON(http.StatusOK, ir)
 }
 

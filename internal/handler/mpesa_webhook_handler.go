@@ -139,7 +139,7 @@ func (h *MpesaWebhookHandler) Handle(c *gin.Context) {
 		UserAgent:  c.Request.UserAgent(),
 	})
 
-	// Boost payment: no interaction, create CompanionBoost for 24h
+	// Boost payment: no interaction, create CompanionBoost for 1 month
 	var meta struct {
 		Type string `json:"type"`
 	}
@@ -149,10 +149,10 @@ func (h *MpesaWebhookHandler) Handle(c *gin.Context) {
 	if meta.Type == "BOOST" {
 		profile, _ := h.companionRepo.GetByUserID(p.UserID)
 		if profile != nil {
-			boostEnd := now.Add(24 * time.Hour)
+			boostEnd := now.Add(30 * 24 * time.Hour) // 1 month
 			b := &models.CompanionBoost{
 				CompanionID: profile.ID,
-				BoostType:   "24h",
+				BoostType:   "30d",
 				StartAt:     now,
 				EndAt:       boostEnd,
 				IsActive:    true,
