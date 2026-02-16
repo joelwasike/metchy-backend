@@ -19,10 +19,11 @@ const (
 )
 
 const (
-	RequestStatusPending  = "PENDING"
-	RequestStatusAccepted = "ACCEPTED"
-	RequestStatusRejected = "REJECTED"
-	RequestStatusExpired  = "EXPIRED"
+	RequestStatusPending    = "PENDING"
+	RequestStatusPendingKYC = "PENDING_KYC" // payment done but client KYC not complete; request not sent to companion yet
+	RequestStatusAccepted   = "ACCEPTED"
+	RequestStatusRejected   = "REJECTED"
+	RequestStatusExpired    = "EXPIRED"
 )
 
 const (

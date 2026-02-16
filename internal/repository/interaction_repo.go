@@ -55,6 +55,13 @@ func (r *InteractionRepository) RejectOtherPendingByCompanionID(companionID, exc
 		Updates(map[string]interface{}{"status": "REJECTED", "rejected_at": time.Now()}).Error
 }
 
+// ListPendingKycByClientID returns interactions with status PENDING_KYC for the client (payment done, KYC not complete yet).
+func (r *InteractionRepository) ListPendingKycByClientID(clientID uint, limit int) ([]models.InteractionRequest, error) {
+	var list []models.InteractionRequest
+	err := r.db.Where("client_id = ? AND status = ?", clientID, "PENDING_KYC").Preload("Payment").Preload("Companion").Limit(limit).Find(&list).Error
+	return list, err
+}
+
 func (r *InteractionRepository) ListByClientID(clientID uint, limit, offset int) ([]models.InteractionRequest, error) {
 	var list []models.InteractionRequest
 	err := r.db.Where("client_id = ?", clientID).Preload("Companion").Limit(limit).Offset(offset).Order("created_at DESC").Find(&list).Error

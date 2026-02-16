@@ -44,6 +44,7 @@ type MpesaWebhookHandler struct {
 	walletRepo      *repository.WalletRepository
 	auditRepo       *repository.AuditLogRepository
 	notifSvc        *service.NotificationService
+	userRepo        *repository.UserRepository
 }
 
 func NewMpesaWebhookHandler(
@@ -53,6 +54,7 @@ func NewMpesaWebhookHandler(
 	walletRepo *repository.WalletRepository,
 	auditRepo *repository.AuditLogRepository,
 	notifSvc *service.NotificationService,
+	userRepo *repository.UserRepository,
 ) *MpesaWebhookHandler {
 	return &MpesaWebhookHandler{
 		paymentRepo:     paymentRepo,
@@ -61,6 +63,7 @@ func NewMpesaWebhookHandler(
 		walletRepo:      walletRepo,
 		auditRepo:       auditRepo,
 		notifSvc:        notifSvc,
+		userRepo:        userRepo,
 	}
 }
 
@@ -164,8 +167,8 @@ func (h *MpesaWebhookHandler) Handle(c *gin.Context) {
 		return
 	}
 
-	// Payment confirmed. Companion must explicitly accept before chat unlocks.
-	// If companion already rejected: refund client's wallet.
+	// Payment confirmed. If client KYC not complete, set PENDING_KYC and do not notify companion yet.
+	// When client completes KYC, request is released (status -> PENDING) and companion is notified.
 	ir, err := h.interactionRepo.GetByPaymentID(p.ID)
 	if err == nil && ir != nil {
 		if ir.Status == "REJECTED" {
@@ -174,27 +177,35 @@ func (h *MpesaWebhookHandler) Handle(c *gin.Context) {
 				log.Printf("[MPESA callback] interaction %d already REJECTED, refunded %d cents to client %d", ir.ID, ir.Payment.AmountCents, ir.ClientID)
 			}
 		} else if ir.Status == "PENDING" {
-			// Notify companion: client has paid, they should accept or deny
-			clientName := "A client"
-			if ir.Client.ID != 0 {
-				if ir.Client.Username != "" {
-					clientName = ir.Client.Username
-				} else {
-					clientName = ir.Client.Email
+			clientUser, _ := h.userRepo.GetByID(ir.ClientID)
+			if clientUser != nil && !clientUser.KYC {
+				// Client has not completed KYC: do not send request to companion yet
+				ir.Status = "PENDING_KYC"
+				_ = h.interactionRepo.Update(ir)
+				log.Printf("[MPESA callback] interaction %d set PENDING_KYC (client %d KYC not complete)", ir.ID, ir.ClientID)
+			} else {
+				// Notify companion: client has paid, they should accept or deny
+				clientName := "A client"
+				if ir.Client.ID != 0 {
+					if ir.Client.Username != "" {
+						clientName = ir.Client.Username
+					} else {
+						clientName = ir.Client.Email
+					}
 				}
-			}
-			serviceType := ir.InteractionType
-			if p.Metadata != "" {
-				var meta struct {
-					ServiceType string `json:"service_type"`
+				serviceType := ir.InteractionType
+				if p.Metadata != "" {
+					var meta struct {
+						ServiceType string `json:"service_type"`
+					}
+					if json.Unmarshal([]byte(p.Metadata), &meta) == nil && meta.ServiceType != "" {
+						serviceType = meta.ServiceType
+					}
 				}
-				if json.Unmarshal([]byte(p.Metadata), &meta) == nil && meta.ServiceType != "" {
-					serviceType = meta.ServiceType
+				comp, _ := h.companionRepo.GetByID(ir.CompanionID)
+				if comp != nil {
+					_ = h.notifSvc.NotifyPaidRequest(comp.UserID, ir.ID, clientName, serviceType)
 				}
-			}
-			comp, _ := h.companionRepo.GetByID(ir.CompanionID)
-			if comp != nil {
-				_ = h.notifSvc.NotifyPaidRequest(comp.UserID, ir.ID, clientName, serviceType)
 			}
 		}
 	}

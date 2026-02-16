@@ -58,7 +58,7 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 
 	// Handlers
 	authHandler := handler.NewAuthHandler(authSvc, presenceRepo, auditRepo, companionRepo)
-	meHandler := handler.NewMeHandler(userRepo, companionRepo, locRepo, favRepo, paymentRepo, interactionRepo, walletRepo)
+	meHandler := handler.NewMeHandler(userRepo, companionRepo, locRepo, favRepo, paymentRepo, interactionRepo, walletRepo, notifSvc)
 	googleOAuthHandler := handler.NewGoogleOAuthHandler(cfg, authSvc, presenceRepo, auditRepo)
 	discoveryHandler := handler.NewDiscoveryHandler(discoveryRepo)
 	companionHandler := handler.NewCompanionHandler(companionRepo, userRepo, interactionRepo, cloud)
@@ -74,7 +74,7 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 	paymentWebhookHandler := handler.NewPaymentWebhookHandler(paymentRepo, auditRepo, notifSvc, cfg)
 	walletHandler := handler.NewWalletHandler(walletRepo)
 	mpesaHandler := handler.NewMpesaHandler(cfg, paymentRepo, interactionRepo, companionRepo, walletRepo, userRepo, notifSvc)
-	mpesaWebhookHandler := handler.NewMpesaWebhookHandler(paymentRepo, interactionRepo, companionRepo, walletRepo, auditRepo, notifSvc)
+	mpesaWebhookHandler := handler.NewMpesaWebhookHandler(paymentRepo, interactionRepo, companionRepo, walletRepo, auditRepo, notifSvc, userRepo)
 	withdrawalRepo := repository.NewWithdrawalRepository(db)
 	withdrawalHandler := handler.NewWithdrawalHandler(cfg, walletRepo, withdrawalRepo, companionRepo)
 	withdrawalWebhookHandler := handler.NewWithdrawalWebhookHandler(withdrawalRepo, walletRepo)
@@ -130,6 +130,7 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 			meAdult.GET("/interactions/:interaction_id/distance", distanceHandler.GetDistance)
 			meAdult.POST("/upload/chat", uploadHandler.UploadChatMedia)
 			meAdult.POST("/fcm-token", meHandler.RegisterFCMToken)
+			meAdult.POST("/kyc-complete", meHandler.CompleteKYC)
 			meAdult.POST("/interactions/:interaction_id/video-call-request", interactionHandler.VideoCallRequest)
 			meAdult.POST("/boost/initiate", middleware.RequireRole("COMPANION"), mpesaHandler.InitiateBoost)
 		}

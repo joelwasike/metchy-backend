@@ -122,12 +122,17 @@ func (h *MpesaHandler) Initiate(c *gin.Context) {
 			return
 		}
 		expiresAt := now.Add(30 * time.Minute)
+		clientUser, _ := h.userRepo.GetByID(clientID)
+		status := domain.RequestStatusPending
+		if clientUser != nil && !clientUser.KYC {
+			status = "PENDING_KYC" // request not sent to companion until KYC complete
+		}
 		ir := &models.InteractionRequest{
 			ClientID:         clientID,
 			CompanionID:      req.CompanionID,
 			InteractionType:  req.InteractionType,
 			PaymentID:        &pay.ID,
-			Status:           domain.RequestStatusPending,
+			Status:           status,
 			DurationMinutes:  req.DurationMinutes,
 			ExpiresAt:        &expiresAt,
 		}
@@ -139,23 +144,28 @@ func (h *MpesaHandler) Initiate(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "interaction create failed"})
 			return
 		}
-		// Companion must accept before chat unlocks
-		clientName := "A client"
-		if client, _ := h.userRepo.GetByID(clientID); client != nil {
-			if client.Username != "" {
-				clientName = client.Username
-			} else {
-				clientName = client.Email
+		msg := "Payment successful! Waiting for " + companion.DisplayName + " to accept your request."
+		if status == "PENDING_KYC" {
+			msg = "Payment successful! Complete KYC to send your request to " + companion.DisplayName + "."
+		} else {
+			clientName := "A client"
+			if clientUser != nil {
+				if clientUser.Username != "" {
+					clientName = clientUser.Username
+				} else {
+					clientName = clientUser.Email
+				}
 			}
+			_ = h.notifSvc.NotifyPaidRequest(companion.UserID, ir.ID, clientName, req.InteractionType)
 		}
-		_ = h.notifSvc.NotifyPaidRequest(companion.UserID, ir.ID, clientName, req.InteractionType)
 		c.JSON(http.StatusCreated, gin.H{
 			"order_id":        orderID,
 			"interaction_id":  ir.ID,
 			"amount":          req.AmountKES,
 			"currency":        "KES",
 			"payment_status":  "COMPLETED",
-			"message":         "Payment successful! Waiting for " + companion.DisplayName + " to accept your request.",
+			"message":         msg,
+			"requires_kyc":   status == "PENDING_KYC",
 		})
 		return
 	}

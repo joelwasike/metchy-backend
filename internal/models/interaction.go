@@ -14,7 +14,7 @@ type InteractionRequest struct {
 	CompanionID      uint           `gorm:"not null;index" json:"companion_id"`
 	InteractionType  string         `gorm:"size:20;not null;index" json:"interaction_type"` // CHAT, VIDEO, BOOKING
 	PaymentID        *uint          `gorm:"index" json:"payment_id"`
-	Status           string         `gorm:"size:20;not null;index" json:"status"` // PENDING, ACCEPTED, REJECTED, EXPIRED
+	Status           string         `gorm:"size:20;not null;index" json:"status"` // PENDING, PENDING_KYC, ACCEPTED, REJECTED, EXPIRED
 	DurationMinutes  int            `json:"duration_minutes"`
 	ExpiresAt          *time.Time     `json:"expires_at"`
 	AcceptedAt         *time.Time     `json:"accepted_at"`

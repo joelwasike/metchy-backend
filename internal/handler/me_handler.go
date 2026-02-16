@@ -1,12 +1,14 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
 	"lusty/internal/domain"
 	"lusty/internal/middleware"
 	"lusty/internal/repository"
+	"lusty/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -19,6 +21,7 @@ type MeHandler struct {
 	paymentRepo     *repository.PaymentRepository
 	interactionRepo *repository.InteractionRepository
 	walletRepo      *repository.WalletRepository
+	notifSvc        *service.NotificationService
 }
 
 func NewMeHandler(
@@ -29,6 +32,7 @@ func NewMeHandler(
 	paymentRepo *repository.PaymentRepository,
 	interactionRepo *repository.InteractionRepository,
 	walletRepo *repository.WalletRepository,
+	notifSvc *service.NotificationService,
 ) *MeHandler {
 	return &MeHandler{
 		userRepo:        userRepo,
@@ -38,6 +42,7 @@ func NewMeHandler(
 		paymentRepo:     paymentRepo,
 		interactionRepo: interactionRepo,
 		walletRepo:      walletRepo,
+		notifSvc:        notifSvc,
 	}
 }
 
@@ -300,6 +305,59 @@ func (h *MeHandler) GetFans(c *gin.Context) {
 		out = append(out, gin.H{"client_id": e.ClientID, "name": e.Name})
 	}
 	c.JSON(http.StatusOK, gin.H{"fans": out})
+}
+
+// CompleteKYC marks the user as KYC complete and releases any PENDING_KYC interactions (sends request to companion).
+// Call after client completes identity verification. Companion-only requests that were paid but held for KYC are now sent.
+func (h *MeHandler) CompleteKYC(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	u, err := h.userRepo.GetByID(userID)
+	if err != nil || u == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+	u.KYC = true
+	if err := h.userRepo.Update(u); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "update failed"})
+		return
+	}
+	list, err := h.interactionRepo.ListPendingKycByClientID(userID, 50)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "kyc": true, "released": 0})
+		return
+	}
+	released := 0
+	for i := range list {
+		ir := &list[i]
+		if ir.Payment == nil || ir.Payment.Status != "COMPLETED" {
+			continue
+		}
+		ir.Status = domain.RequestStatusPending
+		if err := h.interactionRepo.Update(ir); err != nil {
+			continue
+		}
+		released++
+		clientName := "A client"
+		if u.Username != "" {
+			clientName = u.Username
+		} else {
+			clientName = u.Email
+		}
+		serviceType := ir.InteractionType
+		if ir.Payment.Metadata != "" {
+			var meta struct {
+				ServiceType string `json:"service_type"`
+			}
+			if json.Unmarshal([]byte(ir.Payment.Metadata), &meta) == nil && meta.ServiceType != "" {
+				serviceType = meta.ServiceType
+			}
+		}
+		comp, _ := h.companionRepo.GetByID(ir.CompanionID)
+		if comp != nil && h.notifSvc != nil {
+			_ = h.notifSvc.NotifyPaidRequest(comp.UserID, ir.ID, clientName, serviceType)
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "kyc": true, "released": released})
 }
 
 // CompleteOnboarding marks companion onboarding as complete. Optional date_of_birth for Google signups.

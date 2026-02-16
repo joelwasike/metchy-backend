@@ -120,6 +120,10 @@ func (h *InteractionHandler) ListMine(c *gin.Context) {
 		}
 		out := make([]gin.H, 0, len(list))
 		for _, ir := range list {
+			// Companion does not see PENDING_KYC (request not sent until client completes KYC)
+			if ir.Status == "PENDING_KYC" {
+				continue
+			}
 			clientDisplay := ""
 			clientAvatarURL := ""
 			if c, _ := h.userRepo.GetByID(ir.ClientID); c != nil {
