@@ -104,7 +104,7 @@ func (h *GoogleOAuthHandler) Callback(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user info"})
 		return
 	}
-	u, access, refresh, _, err := h.authSvc.LoginWithGoogle(info.ID, info.Email, info.Name, info.Picture, "")
+	u, access, refresh, _, _, err := h.authSvc.LoginWithGoogle(info.ID, info.Email, info.Name, info.Picture, "")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "login failed"})
 		return
@@ -167,39 +167,36 @@ func (h *GoogleOAuthHandler) Token(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid token payload"})
 		return
 	}
-	u, access, refresh, isNew, err := h.authSvc.LoginWithGoogle(info.Sub, info.Email, info.Name, info.Picture, req.Role)
+	u, access, refresh, isNew, roleChanged, err := h.authSvc.LoginWithGoogle(info.Sub, info.Email, info.Name, info.Picture, req.Role)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "login failed"})
 		return
 	}
 
-	// Post-creation steps only for brand new users
-	if isNew {
-		// Auto-create CompanionProfile for COMPANION
-		if u.Role == domain.RoleCompanion && h.companionRepo != nil {
-			displayName := u.Username
-			if displayName == "" {
-				displayName, _, _ = strings.Cut(u.Email, "@")
-			}
-			if displayName == "" {
-				displayName = "Companion"
-			}
-			_ = h.companionRepo.Create(&models.CompanionProfile{
-				UserID:            u.ID,
-				DisplayName:       displayName,
-				AppearInSearch:    false,
-				AcceptNewRequests: true,
-			})
+	// Create companion profile for new users or when role switched to COMPANION
+	if (isNew || roleChanged) && u.Role == domain.RoleCompanion && h.companionRepo != nil {
+		displayName := u.Username
+		if displayName == "" {
+			displayName, _, _ = strings.Cut(u.Email, "@")
 		}
-		// Process referral code
-		if req.ReferralCode != "" && h.referralRepo != nil {
-			rc, err := h.referralRepo.GetByCode(req.ReferralCode)
-			if err == nil && rc != nil && rc.UserID != u.ID {
-				_ = h.referralRepo.CreateReferral(&models.Referral{
-					ReferrerID:     rc.UserID,
-					ReferredUserID: u.ID,
-				})
-			}
+		if displayName == "" {
+			displayName = "Companion"
+		}
+		_ = h.companionRepo.Create(&models.CompanionProfile{
+			UserID:            u.ID,
+			DisplayName:       displayName,
+			AppearInSearch:    false,
+			AcceptNewRequests: true,
+		})
+	}
+	// Process referral code only for brand-new accounts
+	if isNew && req.ReferralCode != "" && h.referralRepo != nil {
+		rc, err := h.referralRepo.GetByCode(req.ReferralCode)
+		if err == nil && rc != nil && rc.UserID != u.ID {
+			_ = h.referralRepo.CreateReferral(&models.Referral{
+				ReferrerID:     rc.UserID,
+				ReferredUserID: u.ID,
+			})
 		}
 	}
 
