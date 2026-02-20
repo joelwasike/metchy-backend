@@ -38,3 +38,17 @@ const (
 
 // Search radius options in km
 var SearchRadiusKm = []float64{1, 3, 5, 10, 25}
+
+// Wallet transaction types
+const (
+	WalletTxTypeEarning            = "EARNING"
+	WalletTxTypeWithdrawal         = "WITHDRAWAL"
+	WalletTxTypeBoostPayment       = "BOOST_PAYMENT"
+	WalletTxTypeReferralCommission = "REFERRAL_COMMISSION"
+)
+
+// Referral commission rate (5%) and max qualifying transactions per referral
+const (
+	ReferralCommissionRate     = 0.05
+	ReferralMaxTransactions    = 2
+)

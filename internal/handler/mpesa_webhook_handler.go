@@ -2,11 +2,13 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"time"
 
+	"lusty/internal/domain"
 	"lusty/internal/models"
 	"lusty/internal/repository"
 	"lusty/internal/service"
@@ -45,6 +47,7 @@ type MpesaWebhookHandler struct {
 	auditRepo       *repository.AuditLogRepository
 	notifSvc        *service.NotificationService
 	userRepo        *repository.UserRepository
+	referralRepo    *repository.ReferralRepository
 }
 
 func NewMpesaWebhookHandler(
@@ -55,6 +58,7 @@ func NewMpesaWebhookHandler(
 	auditRepo *repository.AuditLogRepository,
 	notifSvc *service.NotificationService,
 	userRepo *repository.UserRepository,
+	referralRepo *repository.ReferralRepository,
 ) *MpesaWebhookHandler {
 	return &MpesaWebhookHandler{
 		paymentRepo:     paymentRepo,
@@ -64,6 +68,7 @@ func NewMpesaWebhookHandler(
 		auditRepo:       auditRepo,
 		notifSvc:        notifSvc,
 		userRepo:        userRepo,
+		referralRepo:    referralRepo,
 	}
 }
 
@@ -165,6 +170,25 @@ func (h *MpesaWebhookHandler) Handle(c *gin.Context) {
 		}
 		c.JSON(http.StatusOK, gin.H{"received": true})
 		return
+	}
+
+	// Pay 5% referral commission to whoever referred this client, for their first 2 orders.
+	if h.referralRepo != nil {
+		clientUser, _ := h.userRepo.GetByID(p.UserID)
+		if clientUser != nil && clientUser.IsClient() {
+			ref, err := h.referralRepo.GetReferralByReferredUserID(p.UserID)
+			if err == nil && ref != nil && ref.CompletedCount < domain.ReferralMaxTransactions {
+				commission := int64(float64(p.AmountCents) * domain.ReferralCommissionRate)
+				if commission > 0 {
+					_ = h.walletRepo.Credit(ref.ReferrerID, commission)
+					_ = h.walletRepo.RecordTransaction(ref.ReferrerID, commission, domain.WalletTxTypeReferralCommission,
+						fmt.Sprintf("ref_%d_payment_%d", ref.ID, p.ID))
+					_ = h.referralRepo.IncrementCompletedCount(ref.ID)
+					log.Printf("[referral] client %d: credited %d cents commission to referrer %d (ref %d, count now %d)",
+						p.UserID, commission, ref.ReferrerID, ref.ID, ref.CompletedCount+1)
+				}
+			}
+		}
 	}
 
 	// Payment confirmed. If client KYC not complete, set PENDING_KYC and do not notify companion yet.

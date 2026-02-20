@@ -96,8 +96,8 @@ func Load() *Config {
 			Issuer:        "metchi",
 		},
 		OAuth: OAuthConfig{
-			GoogleClientID:     "your-google-client-id.apps.googleusercontent.com",
-			GoogleClientSecret: "your-google-client-secret",
+			GoogleClientID:     "78709521647-napr1he2vndrci6bcqjtu8b9j9t2ojs4.apps.googleusercontent.com",
+			GoogleClientSecret: "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",
 			GoogleRedirectURL:  "metchi.theliberec.com/app/api/v1/auth/google/callback",
 		},
 		Cloudinary: CloudinaryConfig{

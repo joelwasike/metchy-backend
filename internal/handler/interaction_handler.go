@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -23,6 +24,7 @@ type InteractionHandler struct {
 	walletRepo      *repository.WalletRepository
 	userRepo        *repository.UserRepository
 	notifSvc        *service.NotificationService
+	referralRepo    *repository.ReferralRepository
 }
 
 func NewInteractionHandler(
@@ -32,6 +34,7 @@ func NewInteractionHandler(
 	walletRepo *repository.WalletRepository,
 	userRepo *repository.UserRepository,
 	notifSvc *service.NotificationService,
+	referralRepo *repository.ReferralRepository,
 ) *InteractionHandler {
 	return &InteractionHandler{
 		interactionRepo: interactionRepo,
@@ -40,6 +43,7 @@ func NewInteractionHandler(
 		walletRepo:      walletRepo,
 		userRepo:        userRepo,
 		notifSvc:        notifSvc,
+		referralRepo:    referralRepo,
 	}
 }
 
@@ -334,7 +338,23 @@ func (h *InteractionHandler) ServiceDone(c *gin.Context) {
 		comp, _ := h.companionRepo.GetByID(ir.CompanionID)
 		if comp != nil {
 			_ = h.walletRepo.CreditWithdrawable(comp.UserID, ir.Payment.AmountCents)
-			_ = h.walletRepo.RecordTransaction(comp.UserID, ir.Payment.AmountCents, "EARNING", fmt.Sprintf("%d", ir.ID))
+			_ = h.walletRepo.RecordTransaction(comp.UserID, ir.Payment.AmountCents, domain.WalletTxTypeEarning, fmt.Sprintf("%d", ir.ID))
+
+			// Pay 5% referral commission to whoever referred this companion, for their first 2 transactions
+			if h.referralRepo != nil {
+				ref, err := h.referralRepo.GetReferralByReferredUserID(comp.UserID)
+				if err == nil && ref != nil && ref.CompletedCount < domain.ReferralMaxTransactions {
+					commission := int64(float64(ir.Payment.AmountCents) * domain.ReferralCommissionRate)
+					if commission > 0 {
+						_ = h.walletRepo.Credit(ref.ReferrerID, commission)
+						_ = h.walletRepo.RecordTransaction(ref.ReferrerID, commission, domain.WalletTxTypeReferralCommission,
+							fmt.Sprintf("ref_%d_interaction_%d", ref.ID, ir.ID))
+						_ = h.referralRepo.IncrementCompletedCount(ref.ID)
+						log.Printf("[referral] companion %d: credited %d cents commission to referrer %d (ref %d, count now %d)",
+							comp.UserID, commission, ref.ReferrerID, ref.ID, ref.CompletedCount+1)
+					}
+				}
+			}
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Service confirmed. Companion can now withdraw."})

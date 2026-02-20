@@ -18,20 +18,22 @@ import (
 type AuthHandler struct {
 	svc           *service.AuthService
 	presenceRepo  *repository.PresenceRepository
-	auditRepo    *repository.AuditLogRepository
+	auditRepo     *repository.AuditLogRepository
 	companionRepo *repository.CompanionRepository
+	referralRepo  *repository.ReferralRepository
 }
 
-func NewAuthHandler(svc *service.AuthService, presenceRepo *repository.PresenceRepository, auditRepo *repository.AuditLogRepository, companionRepo *repository.CompanionRepository) *AuthHandler {
-	return &AuthHandler{svc: svc, presenceRepo: presenceRepo, auditRepo: auditRepo, companionRepo: companionRepo}
+func NewAuthHandler(svc *service.AuthService, presenceRepo *repository.PresenceRepository, auditRepo *repository.AuditLogRepository, companionRepo *repository.CompanionRepository, referralRepo *repository.ReferralRepository) *AuthHandler {
+	return &AuthHandler{svc: svc, presenceRepo: presenceRepo, auditRepo: auditRepo, companionRepo: companionRepo, referralRepo: referralRepo}
 }
 
 type RegisterRequest struct {
-	Email       string `json:"email" binding:"required,email"`
-	Username    string `json:"username" binding:"required,min=3,max=64"`
-	Password    string `json:"password" binding:"required,min=8"`
-	Role        string `json:"role" binding:"required,oneof=CLIENT COMPANION"`
-	DateOfBirth string `json:"date_of_birth" binding:"required"` // ISO date
+	Email        string `json:"email" binding:"required,email"`
+	Username     string `json:"username" binding:"required,min=3,max=64"`
+	Password     string `json:"password" binding:"required,min=8"`
+	Role         string `json:"role" binding:"required,oneof=CLIENT COMPANION"`
+	DateOfBirth  string `json:"date_of_birth" binding:"required"` // ISO date
+	ReferralCode string `json:"referral_code"`                    // optional: referrer's code
 }
 
 type LoginRequest struct {
@@ -71,6 +73,17 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 	h.setPresenceOnline(u.ID)
 	h.auditLog(u.ID, "register", c)
+
+	// Process referral code if provided
+	if req.ReferralCode != "" && h.referralRepo != nil {
+		rc, err := h.referralRepo.GetByCode(req.ReferralCode)
+		if err == nil && rc != nil && rc.UserID != u.ID {
+			_ = h.referralRepo.CreateReferral(&models.Referral{
+				ReferrerID:     rc.UserID,
+				ReferredUserID: u.ID,
+			})
+		}
+	}
 
 	// Auto-create CompanionProfile for COMPANION (needs onboarding to complete)
 	if u.Role == domain.RoleCompanion && h.companionRepo != nil {

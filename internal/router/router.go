@@ -56,8 +56,10 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 	}
 	notifSvc := service.NewNotificationService(notificationRepo, userRepo, fcmSvc)
 
+	referralRepo := repository.NewReferralRepository(db)
+
 	// Handlers
-	authHandler := handler.NewAuthHandler(authSvc, presenceRepo, auditRepo, companionRepo)
+	authHandler := handler.NewAuthHandler(authSvc, presenceRepo, auditRepo, companionRepo, referralRepo)
 	meHandler := handler.NewMeHandler(userRepo, companionRepo, locRepo, favRepo, paymentRepo, interactionRepo, walletRepo, notifSvc)
 	googleOAuthHandler := handler.NewGoogleOAuthHandler(cfg, authSvc, presenceRepo, auditRepo)
 	discoveryHandler := handler.NewDiscoveryHandler(discoveryRepo)
@@ -70,17 +72,18 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 	notificationHandler := handler.NewNotificationHandler(notificationRepo)
 	pricingHandler := handler.NewPricingHandler(companionRepo)
 	boostHandler := handler.NewBoostHandler(companionRepo)
-	interactionHandler := handler.NewInteractionHandler(interactionRepo, companionRepo, paymentRepo, walletRepo, userRepo, notifSvc)
+	interactionHandler := handler.NewInteractionHandler(interactionRepo, companionRepo, paymentRepo, walletRepo, userRepo, notifSvc, referralRepo)
 	paymentWebhookHandler := handler.NewPaymentWebhookHandler(paymentRepo, auditRepo, notifSvc, cfg)
 	walletHandler := handler.NewWalletHandler(walletRepo)
 	mpesaHandler := handler.NewMpesaHandler(cfg, paymentRepo, interactionRepo, companionRepo, walletRepo, userRepo, notifSvc)
-	mpesaWebhookHandler := handler.NewMpesaWebhookHandler(paymentRepo, interactionRepo, companionRepo, walletRepo, auditRepo, notifSvc, userRepo)
+	mpesaWebhookHandler := handler.NewMpesaWebhookHandler(paymentRepo, interactionRepo, companionRepo, walletRepo, auditRepo, notifSvc, userRepo, referralRepo)
 	withdrawalRepo := repository.NewWithdrawalRepository(db)
 	withdrawalHandler := handler.NewWithdrawalHandler(cfg, walletRepo, withdrawalRepo, companionRepo)
 	withdrawalWebhookHandler := handler.NewWithdrawalWebhookHandler(withdrawalRepo, walletRepo)
 	chatHandler := handler.NewChatHandler(interactionRepo, companionRepo)
 	uploadHandler := handler.NewUploadHandler(cloud)
 	distanceHandler := handler.NewDistanceHandler(interactionRepo, companionRepo, locRepo, userRepo)
+	referralHandler := handler.NewReferralHandler(referralRepo)
 
 	authMw := middleware.AuthRequired(&cfg.JWT)
 	adultMw := middleware.AdultOnly(cfg, userRepo)
@@ -133,6 +136,8 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 			meAdult.POST("/kyc-complete", meHandler.CompleteKYC)
 			meAdult.POST("/interactions/:interaction_id/video-call-request", interactionHandler.VideoCallRequest)
 			meAdult.POST("/boost/initiate", middleware.RequireRole("COMPANION"), mpesaHandler.InitiateBoost)
+			meAdult.GET("/referral-code", referralHandler.GetMyReferralCode)
+			meAdult.GET("/referrals", referralHandler.GetMyReferrals)
 		}
 		api.POST("/payments/mpesa/initiate", authMw, adultMw, mpesaHandler.Initiate)
 		api.POST("/interactions", authMw, adultMw, interactionHandler.Create)
