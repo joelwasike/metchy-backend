@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -326,22 +327,15 @@ func (h *MeHandler) CompleteKYC(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "kyc": true, "released": 0})
 		return
 	}
+	clientName := u.Email
+	if u.Username != "" {
+		clientName = u.Username
+	}
 	released := 0
 	for i := range list {
 		ir := &list[i]
 		if ir.Payment == nil || ir.Payment.Status != "COMPLETED" {
 			continue
-		}
-		ir.Status = domain.RequestStatusPending
-		if err := h.interactionRepo.Update(ir); err != nil {
-			continue
-		}
-		released++
-		clientName := "A client"
-		if u.Username != "" {
-			clientName = u.Username
-		} else {
-			clientName = u.Email
 		}
 		serviceType := ir.InteractionType
 		if ir.Payment.Metadata != "" {
@@ -353,7 +347,32 @@ func (h *MeHandler) CompleteKYC(c *gin.Context) {
 			}
 		}
 		comp, _ := h.companionRepo.GetByID(ir.CompanionID)
-		if comp != nil && h.notifSvc != nil {
+		// If the companion is no longer accepting new requests, cancel and refund the client.
+		if comp == nil || !comp.AcceptNewRequests || !comp.IsAvailable {
+			ir.Status = domain.RequestStatusRejected
+			_ = h.interactionRepo.Update(ir)
+			if h.walletRepo != nil {
+				amtCents := ir.Payment.AmountCents
+				_ = h.walletRepo.Credit(userID, amtCents)
+				_ = h.walletRepo.RecordTransaction(userID, amtCents, domain.WalletTxTypeRefund, fmt.Sprintf("interaction_%d", ir.ID))
+			}
+			companionName := "your companion"
+			if comp != nil {
+				companionName = comp.DisplayName
+			}
+			if h.notifSvc != nil {
+				_ = h.notifSvc.Notify(userID, "KYC_REFUND", "Companion unavailable",
+					companionName+" is no longer available. Your payment has been refunded to your wallet.",
+					map[string]interface{}{"interaction_id": ir.ID})
+			}
+			continue
+		}
+		ir.Status = domain.RequestStatusPending
+		if err := h.interactionRepo.Update(ir); err != nil {
+			continue
+		}
+		released++
+		if h.notifSvc != nil {
 			_ = h.notifSvc.NotifyPaidRequest(comp.UserID, ir.ID, clientName, serviceType)
 		}
 	}

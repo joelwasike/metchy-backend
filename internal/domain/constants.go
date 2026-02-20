@@ -45,6 +45,7 @@ const (
 	WalletTxTypeWithdrawal         = "WITHDRAWAL"
 	WalletTxTypeBoostPayment       = "BOOST_PAYMENT"
 	WalletTxTypeReferralCommission = "REFERRAL_COMMISSION"
+	WalletTxTypeRefund             = "REFUND"
 )
 
 // Referral commission rate (5%) and max qualifying transactions per referral
