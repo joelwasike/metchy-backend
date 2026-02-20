@@ -158,7 +158,7 @@ func (h *MpesaHandler) Initiate(c *gin.Context) {
 			}
 			_ = h.notifSvc.NotifyPaidRequest(companion.UserID, ir.ID, clientName, req.InteractionType)
 		}
-		c.JSON(http.StatusCreated, gin.H{
+		c.JSON(http.StatusOK, gin.H{
 			"order_id":        orderID,
 			"interaction_id":  ir.ID,
 			"amount":          req.AmountKES,
@@ -311,7 +311,7 @@ func (h *MpesaHandler) Initiate(c *gin.Context) {
 		msg = "Payment successful! Complete KYC to send your request to " + companion.DisplayName + "."
 	}
 	log.Printf("[MPESA] order_id=%s COMPLETED interaction_id=%d requires_kyc=%v", orderID, ir2.ID, requiresKyc)
-	c.JSON(http.StatusCreated, gin.H{
+	c.JSON(http.StatusOK, gin.H{
 		"order_id":       orderID,
 		"interaction_id": ir2.ID,
 		"amount":         req.AmountKES,
