@@ -61,7 +61,7 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 	// Handlers
 	authHandler := handler.NewAuthHandler(authSvc, presenceRepo, auditRepo, companionRepo, referralRepo)
 	meHandler := handler.NewMeHandler(userRepo, companionRepo, locRepo, favRepo, paymentRepo, interactionRepo, walletRepo, notifSvc)
-	googleOAuthHandler := handler.NewGoogleOAuthHandler(cfg, authSvc, presenceRepo, auditRepo)
+	googleOAuthHandler := handler.NewGoogleOAuthHandler(cfg, authSvc, presenceRepo, auditRepo, companionRepo, referralRepo)
 	discoveryHandler := handler.NewDiscoveryHandler(discoveryRepo)
 	companionHandler := handler.NewCompanionHandler(companionRepo, userRepo, interactionRepo, cloud)
 	locationHandler := handler.NewLocationHandler(locRepo, presenceRepo, companionRepo, cfg, mapHub)

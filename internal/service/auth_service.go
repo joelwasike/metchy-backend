@@ -99,16 +99,17 @@ func (s *AuthService) Login(email, password string) (*models.User, string, strin
 	return u, access, refresh, nil
 }
 
-// LoginWithGoogle creates or finds user by Google ID and returns user + tokens. Caller must ensure age from profile or require DOB later.
-func (s *AuthService) LoginWithGoogle(googleID, email, name, avatarURL string) (*models.User, string, string, error) {
+// LoginWithGoogle creates or finds user by Google ID and returns user + tokens + isNew flag.
+// role is only applied when creating a brand new user; pass empty string to default to CLIENT.
+func (s *AuthService) LoginWithGoogle(googleID, email, name, avatarURL, role string) (*models.User, string, string, bool, error) {
 	u, err := s.userRepo.GetByGoogleID(googleID)
 	if err == nil {
 		access, _ := auth.GenerateAccessToken(&s.cfg.JWT, u.ID, u.Email, u.Role)
 		refresh, _ := auth.GenerateRefreshToken(&s.cfg.JWT, u.ID)
-		return u, access, refresh, nil
+		return u, access, refresh, false, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, "", "", err
+		return nil, "", "", false, err
 	}
 	// New user: check email not already used
 	existing, _ := s.userRepo.GetByEmail(email)
@@ -120,13 +121,16 @@ func (s *AuthService) LoginWithGoogle(googleID, email, name, avatarURL string) (
 			existing.AvatarURL = avatarURL
 		}
 		if err := s.userRepo.Update(existing); err != nil {
-			return nil, "", "", err
+			return nil, "", "", false, err
 		}
 		access, _ := auth.GenerateAccessToken(&s.cfg.JWT, existing.ID, existing.Email, existing.Role)
 		refresh, _ := auth.GenerateRefreshToken(&s.cfg.JWT, existing.ID)
-		return existing, access, refresh, nil
+		return existing, access, refresh, false, nil
 	}
-	// Create new user; role defaults to CLIENT (no DOB from Google - platform may require DOB step later)
+	// Create new user; validate role
+	if role != domain.RoleCompanion {
+		role = domain.RoleClient
+	}
 	gid := googleID
 	username := strings.Split(email, "@")[0]
 	if name != "" {
@@ -139,16 +143,16 @@ func (s *AuthService) LoginWithGoogle(googleID, email, name, avatarURL string) (
 		Email:       email,
 		Username:    username,
 		GoogleID:    &gid,
-		Role:        domain.RoleClient,
+		Role:        role,
 		AvatarURL:   avatarURL,
-		DateOfBirth: nil, // require DOB on first use if 18+ enforced
+		DateOfBirth: nil,
 	}
 	if err := s.userRepo.Create(u); err != nil {
-		return nil, "", "", err
+		return nil, "", "", false, err
 	}
 	access, _ := auth.GenerateAccessToken(&s.cfg.JWT, u.ID, u.Email, u.Role)
 	refresh, _ := auth.GenerateRefreshToken(&s.cfg.JWT, u.ID)
-	return u, access, refresh, nil
+	return u, access, refresh, true, nil
 }
 
 // ChangePassword updates the user's password. Requires current password verification.
