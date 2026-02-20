@@ -68,34 +68,59 @@ func (h *DiscoveryHandler) Discover(c *gin.Context) {
 		limit = 50
 	}
 
-	f := repository.DiscoveryFilters{
-		Latitude:      lat,
-		Longitude:     lng,
-		RadiusKm:      radiusKm,
-		Category:      category,
-		Services:      services,
-		MinAge:        minAge,
-		MaxAge:        maxAge,
-		MinPrice:      minPrice,
-		MaxPrice:      maxPrice,
-		OnlineOnly:    onlineOnly,
-		BoostedFirst:  boostedFirst,
-		SortBy:        sortBy,
-		Limit:         limit,
-		Offset:        offset,
+	// allF fetches ALL matching results without pagination so we can merge and paginate
+	// from the combined list (location-based companions first, then no-location ones).
+	allF := repository.DiscoveryFilters{
+		Latitude:     lat,
+		Longitude:    lng,
+		RadiusKm:     radiusKm,
+		Category:     category,
+		Services:     services,
+		MinAge:       minAge,
+		MaxAge:       maxAge,
+		MinPrice:     minPrice,
+		MaxPrice:     maxPrice,
+		OnlineOnly:   onlineOnly,
+		BoostedFirst: boostedFirst,
+		SortBy:       sortBy,
+		Limit:        9999,
+		Offset:       0,
 	}
-	results, err := h.repo.DiscoverCompanions(f)
+
+	// Location-based companions (within radius, have visible location)
+	locationResults, err := h.repo.DiscoverCompanions(allF)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "discovery failed"})
 		return
 	}
-	if len(results) == 0 {
-		results, err = h.repo.DiscoverCompanionsFallback(f)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "discovery failed"})
-			return
+
+	// Supplement with companions who haven't shared location (or are outside radius)
+	fallbackResults, _ := h.repo.DiscoverCompanionsFallback(allF)
+
+	// Merge: location-based first, fallback deduplicated by companion_id
+	seen := make(map[uint]bool, len(locationResults))
+	merged := locationResults
+	for _, r := range locationResults {
+		seen[r.CompanionProfile.ID] = true
+	}
+	for _, r := range fallbackResults {
+		if !seen[r.CompanionProfile.ID] {
+			merged = append(merged, r)
+			seen[r.CompanionProfile.ID] = true
 		}
 	}
+
+	// Apply pagination from merged list
+	from := offset
+	if from >= len(merged) {
+		c.JSON(http.StatusOK, gin.H{"results": []gin.H{}})
+		return
+	}
+	to := from + limit
+	if to > len(merged) {
+		to = len(merged)
+	}
+	results := merged[from:to]
 	out := make([]gin.H, len(results))
 	for i, r := range results {
 		row := gin.H{
