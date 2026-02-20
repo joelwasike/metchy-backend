@@ -106,8 +106,8 @@ func (h *MpesaWebhookHandler) Handle(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"received": true})
 		return
 	}
-	if p.Status == "COMPLETED" {
-		log.Printf("[MPESA callback] payment %d already COMPLETED for order_id=%s", p.ID, orderID)
+	if p.Status == "COMPLETED" || p.Status == "CANCELLED" {
+		log.Printf("[MPESA callback] payment %d already %s for order_id=%s — ignoring", p.ID, p.Status, orderID)
 		c.JSON(http.StatusOK, gin.H{"received": true})
 		return
 	}

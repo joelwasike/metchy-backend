@@ -253,22 +253,72 @@ func (h *MpesaHandler) Initiate(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "interaction create failed"})
 		return
 	}
-	_ = h.notifSvc.NotifyNewRequest(companion.UserID, ir.ID, req.CustomerFirstName+" "+req.CustomerLastName)
-	log.Printf("[MPESA] Initiate OK order_id=%s checkout_request_id=%s status=%s", orderID, resp.CheckoutRequestID, resp.Status)
-	msg := "Check your phone to complete M-Pesa payment"
-	if walletCents > 0 {
-		msg = "Wallet debited. Check your phone for remaining M-Pesa payment."
+	log.Printf("[MPESA] STK sent order_id=%s checkout_request_id=%s — polling for completion", orderID, resp.CheckoutRequestID)
+
+	// Poll the DB every 2 seconds until the M-Pesa webhook marks the payment COMPLETED or FAILED.
+	// Maximum wait is 90 seconds (M-Pesa STK push typically resolves within 60s).
+	ctx := c.Request.Context()
+	deadline := time.Now().Add(90 * time.Second)
+	var finalPayment *models.Payment
+	for time.Now().Before(deadline) {
+		if ctx.Err() != nil {
+			return // client disconnected
+		}
+		p2, err := h.paymentRepo.GetByID(pay.ID)
+		if err == nil && (p2.Status == "COMPLETED" || p2.Status == "FAILED") {
+			finalPayment = p2
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(2 * time.Second):
+		}
 	}
+
+	if finalPayment == nil || finalPayment.Status != "COMPLETED" {
+		// Timed out or failed: cancel the payment so late webhooks are ignored, refund wallet portion.
+		pay.Status = "CANCELLED"
+		_ = h.paymentRepo.Update(pay)
+		ir.Status = domain.RequestStatusExpired
+		_ = h.interactionRepo.Update(ir)
+		if walletCents > 0 {
+			_ = h.walletRepo.Credit(clientID, walletCents)
+		}
+		resultStatus := "TIMEOUT"
+		msg := "Payment timed out. Please try again."
+		if finalPayment != nil && finalPayment.Status == "FAILED" {
+			resultStatus = "FAILED"
+			msg = "Payment was cancelled or failed. Please try again."
+		}
+		log.Printf("[MPESA] order_id=%s result=%s", orderID, resultStatus)
+		c.JSON(http.StatusOK, gin.H{
+			"order_id":       orderID,
+			"payment_status": resultStatus,
+			"message":        msg,
+		})
+		return
+	}
+
+	// Payment COMPLETED — re-read the interaction (webhook may have set PENDING_KYC).
+	ir2, err := h.interactionRepo.GetByID(ir.ID)
+	if err != nil || ir2 == nil {
+		ir2 = ir
+	}
+	requiresKyc := ir2.Status == "PENDING_KYC"
+	msg := "Payment successful! Waiting for " + companion.DisplayName + " to accept your request."
+	if requiresKyc {
+		msg = "Payment successful! Complete KYC to send your request to " + companion.DisplayName + "."
+	}
+	log.Printf("[MPESA] order_id=%s COMPLETED interaction_id=%d requires_kyc=%v", orderID, ir2.ID, requiresKyc)
 	c.JSON(http.StatusCreated, gin.H{
-		"order_id":            orderID,
-		"checkout_request_id": resp.CheckoutRequestID,
-		"status":              resp.Status,
-		"interaction_id":      ir.ID,
-		"amount":              req.AmountKES,
-		"mpesa_amount_kes":    mpesaCents / 100,
-		"currency":            "KES",
-		"payment_status":      "PENDING",
-		"message":             msg,
+		"order_id":       orderID,
+		"interaction_id": ir2.ID,
+		"amount":         req.AmountKES,
+		"currency":       "KES",
+		"payment_status": "COMPLETED",
+		"message":        msg,
+		"requires_kyc":   requiresKyc,
 	})
 }
 
