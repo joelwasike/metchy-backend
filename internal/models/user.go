@@ -14,7 +14,7 @@ type User struct {
 	Email             string         `gorm:"uniqueIndex;size:255;not null" json:"email"`
 	PasswordHash      string         `gorm:"size:255" json:"-"`
 	Role              string         `gorm:"size:20;not null;index" json:"role"` // CLIENT | COMPANION
-	DateOfBirth       *time.Time     `gorm:"not null" json:"date_of_birth"`
+	DateOfBirth       *time.Time     `json:"date_of_birth"`
 	EmailVerifiedAt   *time.Time     `json:"email_verified_at"`
 	GoogleID          *string        `gorm:"uniqueIndex;size:255" json:"-"` // nil for email signups (avoids duplicate '' on unique index)
 	AvatarURL         string         `gorm:"size:512" json:"avatar_url"`
