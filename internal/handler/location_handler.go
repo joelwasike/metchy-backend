@@ -45,6 +45,7 @@ func (h *LocationHandler) UpdateLocation(c *gin.Context) {
 		return
 	}
 	loc, _ := h.locRepo.GetByUserID(userID)
+	isNew := loc == nil
 	if loc == nil {
 		loc = &models.UserLocation{UserID: userID}
 	}
@@ -54,6 +55,8 @@ func (h *LocationHandler) UpdateLocation(c *gin.Context) {
 	loc.LastUpdatedAt = time.Now()
 	if req.IsLocationVisible != nil {
 		loc.IsLocationVisible = *req.IsLocationVisible
+	} else if isNew {
+		loc.IsLocationVisible = true // default visible; matches gorm:"default:true"
 	}
 	if err := h.locRepo.Upsert(loc); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "update failed"})

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"lusty/config"
 	"lusty/internal/domain"
@@ -115,6 +116,7 @@ func (h *GoogleOAuthHandler) Callback(c *gin.Context) {
 	}
 	presence.Status = domain.PresenceOnline
 	presence.IsOnline = true
+	presence.LastSeenAt = time.Now()
 	_ = h.presenceRepo.Upsert(presence)
 	// Audit
 	_ = h.auditRepo.Create(&models.AuditLog{UserID: &u.ID, Action: "google_oauth_login", Resource: "auth", IP: c.ClientIP(), UserAgent: c.Request.UserAgent()})
@@ -207,6 +209,7 @@ func (h *GoogleOAuthHandler) Token(c *gin.Context) {
 	}
 	presence.Status = domain.PresenceOnline
 	presence.IsOnline = true
+	presence.LastSeenAt = time.Now()
 	_ = h.presenceRepo.Upsert(presence)
 	_ = h.auditRepo.Create(&models.AuditLog{
 		UserID:    &u.ID,
