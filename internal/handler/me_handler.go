@@ -372,6 +372,9 @@ func (h *MeHandler) CompleteKYC(c *gin.Context) {
 			continue
 		}
 		released++
+		// KYC now done: mark companion unavailable (request is now active)
+		comp.IsAvailable = false
+		_ = h.companionRepo.Update(comp)
 		if h.notifSvc != nil {
 			_ = h.notifSvc.NotifyPaidRequest(comp.UserID, ir.ID, clientName, serviceType)
 		}

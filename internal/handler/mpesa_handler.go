@@ -146,8 +146,12 @@ func (h *MpesaHandler) Initiate(c *gin.Context) {
 		}
 		msg := "Payment successful! Waiting for " + companion.DisplayName + " to accept your request."
 		if status == "PENDING_KYC" {
+			// Client KYC not done: keep companion available for other clients; mark unavailable only after KYC
 			msg = "Payment successful! Complete KYC to send your request to " + companion.DisplayName + "."
 		} else {
+			// Client KYC done: request goes to companion now, mark her unavailable
+			companion.IsAvailable = false
+			_ = h.companionRepo.Update(companion)
 			clientName := "A client"
 			if clientUser != nil {
 				if clientUser.Username != "" {
@@ -309,6 +313,10 @@ func (h *MpesaHandler) Initiate(c *gin.Context) {
 	msg := "Payment successful! Waiting for " + companion.DisplayName + " to accept your request."
 	if requiresKyc {
 		msg = "Payment successful! Complete KYC to send your request to " + companion.DisplayName + "."
+	} else {
+		// KYC done: companion has the request, mark her unavailable for other clients
+		companion.IsAvailable = false
+		_ = h.companionRepo.Update(companion)
 	}
 	log.Printf("[MPESA] order_id=%s COMPLETED interaction_id=%d requires_kyc=%v", orderID, ir2.ID, requiresKyc)
 	c.JSON(http.StatusOK, gin.H{

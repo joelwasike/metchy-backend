@@ -201,14 +201,19 @@ func (h *MpesaWebhookHandler) Handle(c *gin.Context) {
 				log.Printf("[MPESA callback] interaction %d already REJECTED, refunded %d cents to client %d", ir.ID, ir.Payment.AmountCents, ir.ClientID)
 			}
 		} else if ir.Status == "PENDING" {
+			comp, _ := h.companionRepo.GetByID(ir.CompanionID)
 			clientUser, _ := h.userRepo.GetByID(ir.ClientID)
 			if clientUser != nil && !clientUser.KYC {
-				// Client has not completed KYC: do not send request to companion yet
+				// Client has not completed KYC: keep companion available for other clients
 				ir.Status = "PENDING_KYC"
 				_ = h.interactionRepo.Update(ir)
 				log.Printf("[MPESA callback] interaction %d set PENDING_KYC (client %d KYC not complete)", ir.ID, ir.ClientID)
 			} else {
-				// Notify companion: client has paid, they should accept or deny
+				// KYC done: mark companion unavailable and notify them
+				if comp != nil {
+					comp.IsAvailable = false
+					_ = h.companionRepo.Update(comp)
+				}
 				clientName := "A client"
 				if ir.Client.ID != 0 {
 					if ir.Client.Username != "" {
@@ -226,7 +231,6 @@ func (h *MpesaWebhookHandler) Handle(c *gin.Context) {
 						serviceType = meta.ServiceType
 					}
 				}
-				comp, _ := h.companionRepo.GetByID(ir.CompanionID)
 				if comp != nil {
 					_ = h.notifSvc.NotifyPaidRequest(comp.UserID, ir.ID, clientName, serviceType)
 				}

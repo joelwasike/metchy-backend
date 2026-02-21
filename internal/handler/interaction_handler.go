@@ -291,6 +291,9 @@ func (h *InteractionHandler) Reject(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "reject failed"})
 		return
 	}
+	// Re-enable companion: request rejected, available for new clients again
+	profile.IsAvailable = true
+	_ = h.companionRepo.Update(profile)
 	client, _ := h.userRepo.GetByID(ir.ClientID)
 	if client != nil {
 		_ = h.notifSvc.NotifyRejected(ir.ClientID, profile.DisplayName)
