@@ -112,6 +112,7 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 		{
 			me.GET("/profile", meHandler.GetProfile)
 			me.POST("/onboarding/complete", meHandler.CompleteOnboarding) // no adult - may set DOB for Google signups
+			me.POST("/fcm-token", meHandler.RegisterFCMToken)             // no adult - must work before DOB is set
 		}
 		meAdult := api.Group("/me")
 		meAdult.Use(authMw, adultMw)
@@ -134,7 +135,6 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 			meAdult.GET("/interactions/:interaction_id/messages", chatHandler.GetMessages)
 			meAdult.GET("/interactions/:interaction_id/distance", distanceHandler.GetDistance)
 			meAdult.POST("/upload/chat", uploadHandler.UploadChatMedia)
-			meAdult.POST("/fcm-token", meHandler.RegisterFCMToken)
 			meAdult.POST("/kyc-complete", meHandler.CompleteKYC)
 			meAdult.POST("/interactions/:interaction_id/video-call-request", interactionHandler.VideoCallRequest)
 			meAdult.POST("/boost/initiate", middleware.RequireRole("COMPANION"), mpesaHandler.InitiateBoost)
