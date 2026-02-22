@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"lusty/internal/models"
 	"lusty/internal/repository"
@@ -108,15 +109,27 @@ func (s *NotificationService) NotifyNewChatMessage(recipientUserID uint, senderN
 // allowing flutter_callkit_incoming to show the native call UI with ring + vibration.
 func (s *NotificationService) NotifyVideoCall(calleeUserID uint, callerName string, interactionID uint) {
 	if s.fcm == nil || s.userRepo == nil {
+		log.Printf("[VideoCall] FCM not configured, skipping push calleeUserID=%d", calleeUserID)
 		return
 	}
 	u, err := s.userRepo.GetByID(calleeUserID)
-	if err != nil || u == nil || u.FCMToken == "" {
+	if err != nil || u == nil {
+		log.Printf("[VideoCall] callee user not found calleeUserID=%d err=%v", calleeUserID, err)
 		return
 	}
-	_ = s.fcm.SendDataOnly(context.Background(), u.FCMToken, map[string]string{
+	if u.FCMToken == "" {
+		log.Printf("[VideoCall] callee has no FCM token calleeUserID=%d — push not sent", calleeUserID)
+		return
+	}
+	log.Printf("[VideoCall] sending FCM push calleeUserID=%d interactionID=%d callerName=%q token=%s...", calleeUserID, interactionID, callerName, u.FCMToken[:8])
+	err = s.fcm.SendDataOnly(context.Background(), u.FCMToken, map[string]string{
 		"type":           "VIDEO_CALL",
 		"interaction_id": fmt.Sprintf("%d", interactionID),
 		"caller_name":    callerName,
 	})
+	if err != nil {
+		log.Printf("[VideoCall] FCM send error calleeUserID=%d interactionID=%d: %v", calleeUserID, interactionID, err)
+	} else {
+		log.Printf("[VideoCall] FCM push sent OK calleeUserID=%d interactionID=%d", calleeUserID, interactionID)
+	}
 }

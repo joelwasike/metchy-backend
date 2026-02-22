@@ -369,15 +369,19 @@ func (h *InteractionHandler) VideoCallRequest(c *gin.Context) {
 	interactionIDStr := c.Param("interaction_id")
 	interactionID, err := strconv.ParseUint(interactionIDStr, 10, 64)
 	if err != nil || interactionID == 0 {
+		log.Printf("[VideoCall] invalid interaction_id=%q callerID=%d", interactionIDStr, callerID)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid interaction_id"})
 		return
 	}
+	log.Printf("[VideoCall] request received callerID=%d interactionID=%d", callerID, interactionID)
 	ir, err := h.interactionRepo.GetByID(uint(interactionID))
 	if err != nil || ir == nil {
+		log.Printf("[VideoCall] interaction not found interactionID=%d err=%v", interactionID, err)
 		c.JSON(http.StatusNotFound, gin.H{"error": "interaction not found"})
 		return
 	}
 	if ir.Status != domain.RequestStatusAccepted {
+		log.Printf("[VideoCall] interaction not accepted interactionID=%d status=%q", interactionID, ir.Status)
 		c.JSON(http.StatusForbidden, gin.H{"error": "interaction not accepted"})
 		return
 	}
@@ -401,9 +405,12 @@ func (h *InteractionHandler) VideoCallRequest(c *gin.Context) {
 			callerName = "A companion"
 		}
 	} else {
+		log.Printf("[VideoCall] callerID=%d is not part of interactionID=%d (clientID=%d companionUserID=%d)", callerID, interactionID, ir.ClientID, ir.Companion.UserID)
 		c.JSON(http.StatusForbidden, gin.H{"error": "not part of this interaction"})
 		return
 	}
+	log.Printf("[VideoCall] sending push: callerID=%d callerName=%q calleeUserID=%d interactionID=%d", callerID, callerName, calleeUserID, ir.ID)
 	h.notifSvc.NotifyVideoCall(calleeUserID, callerName, ir.ID)
+	log.Printf("[VideoCall] push dispatched OK interactionID=%d", ir.ID)
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Call request sent"})
 }
