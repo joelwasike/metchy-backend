@@ -84,6 +84,8 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 	uploadHandler := handler.NewUploadHandler(cloud)
 	distanceHandler := handler.NewDistanceHandler(interactionRepo, companionRepo, locRepo, userRepo)
 	referralHandler := handler.NewReferralHandler(referralRepo)
+	cryptoHandler := handler.NewCryptoHandler(cfg, paymentRepo, companionRepo, walletRepo, userRepo, notifSvc)
+	cryptoWebhookHandler := handler.NewCryptoWebhookHandler(paymentRepo, interactionRepo, companionRepo, walletRepo, userRepo, notifSvc, referralRepo)
 
 	authMw := middleware.AuthRequired(&cfg.JWT)
 	adultMw := middleware.AdultOnly(cfg, userRepo)
@@ -140,6 +142,8 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 			meAdult.GET("/referrals", referralHandler.GetMyReferrals)
 		}
 		api.POST("/payments/mpesa/initiate", authMw, adultMw, mpesaHandler.Initiate)
+		api.GET("/payments/crypto/rates", authMw, adultMw, cryptoHandler.GetRates)
+		api.POST("/payments/crypto/initiate", authMw, adultMw, cryptoHandler.Initiate)
 		api.POST("/interactions", authMw, adultMw, interactionHandler.Create)
 		api.POST("/interactions/:id/accept", authMw, adultMw, middleware.RequireRole("COMPANION"), interactionHandler.Accept)
 		api.POST("/interactions/:id/reject", authMw, adultMw, middleware.RequireRole("COMPANION"), interactionHandler.Reject)
@@ -163,6 +167,7 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 		}
 		api.POST("/webhooks/payment", paymentWebhookHandler.Handle)
 		api.POST("/webhooks/mpesa", mpesaWebhookHandler.Handle)
+		api.POST("/webhooks/crypto", cryptoWebhookHandler.Handle)
 		api.POST("/webhooks/withdrawal", withdrawalWebhookHandler.Handle)
 	}
 

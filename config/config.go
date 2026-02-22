@@ -14,6 +14,7 @@ type Config struct {
 	Location     LocationConfig
 	Payment      PaymentConfig
 	LiberecMpesa LiberecMpesaConfig
+	Swapuzi      SwapuziConfig
 	Firebase     FirebaseConfig
 }
 
@@ -74,6 +75,14 @@ type LiberecMpesaConfig struct {
 	WebhookBaseURL string // e.g. https://yourdomain.com - callback will be WebhookBaseURL + /api/v1/webhooks/mpesa
 }
 
+// SwapuziConfig for Solana/USDT crypto payments via Swapuzi
+type SwapuziConfig struct {
+	BaseURL        string // e.g. https://api.swapuzi.com
+	Email          string
+	Password       string
+	WebhookBaseURL string // callback will be WebhookBaseURL + /api/v1/webhooks/crypto
+}
+
 func Load() *Config {
 	return &Config{
 		Server: ServerConfig{
@@ -124,6 +133,18 @@ func Load() *Config {
 			}
 			return LiberecMpesaConfig{
 				BaseURL:        "https://card-api.theliberec.com",
+				Email:          "metchi@gmail.com",
+				Password:       "joelwasike",
+				WebhookBaseURL: webhookBase,
+			}
+		}(),
+		Swapuzi: func() SwapuziConfig {
+			webhookBase := "https://metchi.theliberec.com"
+			if v := os.Getenv("SWAPUZI_WEBHOOK_BASE_URL"); v != "" {
+				webhookBase = v
+			}
+			return SwapuziConfig{
+				BaseURL:        "https://api.swapuzi.com",
 				Email:          "metchi@gmail.com",
 				Password:       "joelwasike",
 				WebhookBaseURL: webhookBase,
