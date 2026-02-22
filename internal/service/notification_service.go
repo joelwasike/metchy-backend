@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"lusty/internal/models"
 	"lusty/internal/repository"
@@ -102,11 +103,20 @@ func (s *NotificationService) NotifyNewChatMessage(recipientUserID uint, senderN
 	})
 }
 
-// NotifyVideoCall sends push for incoming video call (does not save to notifications table).
+// NotifyVideoCall sends a data-only push for incoming video call (does not save to notifications table).
+// Data-only ensures the Android background handler fires even when the app is killed,
+// allowing flutter_callkit_incoming to show the native call UI with ring + vibration.
 func (s *NotificationService) NotifyVideoCall(calleeUserID uint, callerName string, interactionID uint) {
-	data := map[string]interface{}{
-		"interaction_id": interactionID,
-		"caller_name":   callerName,
+	if s.fcm == nil || s.userRepo == nil {
+		return
 	}
-	s.sendPush(calleeUserID, "VIDEO_CALL", "Incoming video call", callerName+" is calling you", data)
+	u, err := s.userRepo.GetByID(calleeUserID)
+	if err != nil || u == nil || u.FCMToken == "" {
+		return
+	}
+	_ = s.fcm.SendDataOnly(context.Background(), u.FCMToken, map[string]string{
+		"type":           "VIDEO_CALL",
+		"interaction_id": fmt.Sprintf("%d", interactionID),
+		"caller_name":    callerName,
+	})
 }
