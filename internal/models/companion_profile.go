@@ -59,6 +59,7 @@ type CompanionPricing struct {
 	CompanionID   uint           `gorm:"not null;index" json:"companion_id"`
 	Type          string         `gorm:"size:30;not null;index" json:"type"` // CHAT_ACCESS, VIDEO_PER_5MIN, BOOKING_FEE, or service: SEX, MASSAGE, etc.
 	Unit          string         `gorm:"size:20" json:"unit"`                // per_service, per_hour, per_night (for service pricing)
+	CustomName    string         `gorm:"size:100" json:"custom_name"`        // display name for CUSTOM type
 	AmountCents   int64          `gorm:"not null" json:"amount_cents"`
 	Currency      string         `gorm:"size:3;default:'USD'" json:"currency"`
 	IsActive      bool           `gorm:"default:true" json:"is_active"`
