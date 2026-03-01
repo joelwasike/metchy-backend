@@ -54,6 +54,15 @@ func (r *UserRepository) GetByGoogleID(googleID string) (*models.User, error) {
 	return &u, nil
 }
 
+func (r *UserRepository) GetByAppleID(appleID string) (*models.User, error) {
+	var u models.User
+	err := r.db.Where("apple_id = ?", appleID).First(&u).Error
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
 func (r *UserRepository) Update(u *models.User) error {
 	return r.db.Save(u).Error
 }

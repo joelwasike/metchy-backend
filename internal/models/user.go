@@ -17,6 +17,7 @@ type User struct {
 	DateOfBirth       *time.Time     `json:"date_of_birth"`
 	EmailVerifiedAt   *time.Time     `json:"email_verified_at"`
 	GoogleID          *string        `gorm:"uniqueIndex;size:255" json:"-"` // nil for email signups (avoids duplicate '' on unique index)
+	AppleID           *string        `gorm:"uniqueIndex;size:255" json:"-"` // nil when not using Sign in with Apple
 	AvatarURL         string         `gorm:"size:512" json:"avatar_url"`
 	SearchRadiusKm    float64        `gorm:"default:10" json:"search_radius_km"` // Client: max search radius (default 10km)
 	KYC               bool           `gorm:"default:false" json:"kyc"`

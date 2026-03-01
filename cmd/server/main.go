@@ -25,6 +25,7 @@ func main() {
 	if err := database.AutoMigrate(db); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
+	database.SeedAdmin(db)
 
 	cloud, err := cloudinary.NewClientFromParams(cfg.Cloudinary.CloudName, cfg.Cloudinary.APIKey, cfg.Cloudinary.APISecret)
 	if err != nil {

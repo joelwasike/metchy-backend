@@ -20,11 +20,11 @@ type AuthHandler struct {
 	presenceRepo  *repository.PresenceRepository
 	auditRepo     *repository.AuditLogRepository
 	companionRepo *repository.CompanionRepository
-	referralRepo  *repository.ReferralRepository
+	referralSvc   *service.ReferralService
 }
 
-func NewAuthHandler(svc *service.AuthService, presenceRepo *repository.PresenceRepository, auditRepo *repository.AuditLogRepository, companionRepo *repository.CompanionRepository, referralRepo *repository.ReferralRepository) *AuthHandler {
-	return &AuthHandler{svc: svc, presenceRepo: presenceRepo, auditRepo: auditRepo, companionRepo: companionRepo, referralRepo: referralRepo}
+func NewAuthHandler(svc *service.AuthService, presenceRepo *repository.PresenceRepository, auditRepo *repository.AuditLogRepository, companionRepo *repository.CompanionRepository, referralSvc *service.ReferralService) *AuthHandler {
+	return &AuthHandler{svc: svc, presenceRepo: presenceRepo, auditRepo: auditRepo, companionRepo: companionRepo, referralSvc: referralSvc}
 }
 
 type RegisterRequest struct {
@@ -74,15 +74,9 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	h.setPresenceOnline(u.ID)
 	h.auditLog(u.ID, "register", c)
 
-	// Process referral code if provided
-	if req.ReferralCode != "" && h.referralRepo != nil {
-		rc, err := h.referralRepo.GetByCode(req.ReferralCode)
-		if err == nil && rc != nil && rc.UserID != u.ID {
-			_ = h.referralRepo.CreateReferral(&models.Referral{
-				ReferrerID:     rc.UserID,
-				ReferredUserID: u.ID,
-			})
-		}
+	// Process referral code if provided (creates referral + bonus for companions)
+	if h.referralSvc != nil {
+		h.referralSvc.ProcessReferralCode(req.ReferralCode, u)
 	}
 
 	// Auto-create CompanionProfile for COMPANION (needs onboarding to complete)

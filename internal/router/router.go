@@ -2,9 +2,13 @@ package router
 
 import (
 	"log"
+	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"lusty/config"
+	"lusty/internal/domain"
 	"lusty/internal/handler"
 	"lusty/internal/middleware"
 	"lusty/internal/repository"
@@ -22,7 +26,21 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 	}
 	r := gin.New()
 	r.Use(gin.Recovery())
-	// Skip gin.Logger() to reduce log noise; use gin.Default() if you need request logging
+	// CORS for dashboard
+	r.Use(func(c *gin.Context) {
+		origin := c.GetHeader("Origin")
+		if origin != "" {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			c.Header("Access-Control-Allow-Credentials", "true")
+			if c.Request.Method == "OPTIONS" {
+				c.AbortWithStatus(http.StatusNoContent)
+				return
+			}
+		}
+		c.Next()
+	})
 	r.Use(middleware.RateLimit(middleware.NewInMemoryRateLimiter(100, 60*time.Second)))
 
 	// Repositories
@@ -57,11 +75,25 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 	notifSvc := service.NewNotificationService(notificationRepo, userRepo, fcmSvc)
 
 	referralRepo := repository.NewReferralRepository(db)
+	settingRepo := repository.NewSettingRepository(db)
+	adminRepo := repository.NewAdminRepository(db)
+
+	// Seed default system settings
+	_ = settingRepo.SeedDefaults(map[string]string{
+		domain.SettingReferralBonusReferrer:  "10000", // KES 100
+		domain.SettingReferralBonusReferred:  "20000", // KES 200
+		domain.SettingReferralCommissionRate: "0.05",
+		domain.SettingReferralMaxTx:          "2",
+	})
+
+	referralSvc := service.NewReferralService(referralRepo, walletRepo, settingRepo)
 
 	// Handlers
-	authHandler := handler.NewAuthHandler(authSvc, presenceRepo, auditRepo, companionRepo, referralRepo)
+	authHandler := handler.NewAuthHandler(authSvc, presenceRepo, auditRepo, companionRepo, referralSvc)
 	meHandler := handler.NewMeHandler(userRepo, companionRepo, locRepo, favRepo, paymentRepo, interactionRepo, walletRepo, notifSvc)
-	googleOAuthHandler := handler.NewGoogleOAuthHandler(cfg, authSvc, presenceRepo, auditRepo, companionRepo, referralRepo)
+	googleOAuthHandler := handler.NewGoogleOAuthHandler(cfg, authSvc, presenceRepo, auditRepo, companionRepo, referralSvc)
+	appleOAuthHandler := handler.NewAppleOAuthHandler(authSvc, presenceRepo, auditRepo, companionRepo, referralSvc)
+	adminHandler := handler.NewAdminHandler(adminRepo, settingRepo, authSvc)
 	discoveryHandler := handler.NewDiscoveryHandler(discoveryRepo)
 	companionHandler := handler.NewCompanionHandler(companionRepo, userRepo, interactionRepo, cloud)
 	locationHandler := handler.NewLocationHandler(locRepo, presenceRepo, companionRepo, cfg, mapHub)
@@ -102,6 +134,7 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 			authGroup.GET("/google", googleOAuthHandler.Redirect)
 			authGroup.GET("/google/callback", googleOAuthHandler.Callback)
 			authGroup.POST("/google/token", googleOAuthHandler.Token)
+			authGroup.POST("/apple/token", appleOAuthHandler.Token)
 		}
 
 		api.GET("/discover", authMw, adultMw, discoveryHandler.Discover)
@@ -174,6 +207,47 @@ func Setup(cfg *config.Config, db *gorm.DB, cloud cloudinary.Client) *gin.Engine
 	r.GET("/ws/map", ws.UpgradeMapWS(&cfg.JWT, mapHub))
 	r.GET("/ws/chat", handler.UpgradeChatWS(&cfg.JWT, chatHub, interactionRepo, userRepo, notifSvc))
 	r.GET("/ws/video", handler.UpgradeVideoWS(&cfg.JWT, videoHub, interactionRepo))
+
+	// Admin API routes
+	adminAPI := r.Group("/api/v1/admin")
+	{
+		adminAPI.POST("/login", adminHandler.AdminLogin)
+	}
+	adminAuth := adminAPI.Group("")
+	adminAuth.Use(authMw, middleware.AdminRequired())
+	{
+		adminAuth.GET("/dashboard", adminHandler.Dashboard)
+		adminAuth.GET("/users", adminHandler.ListUsers)
+		adminAuth.GET("/users/:id", adminHandler.GetUser)
+		adminAuth.PATCH("/users/:id", adminHandler.UpdateUser)
+		adminAuth.GET("/companions", adminHandler.ListCompanions)
+		adminAuth.GET("/transactions", adminHandler.ListTransactions)
+		adminAuth.GET("/payments", adminHandler.ListPayments)
+		adminAuth.GET("/withdrawals", adminHandler.ListWithdrawals)
+		adminAuth.GET("/interactions", adminHandler.ListInteractions)
+		adminAuth.GET("/reports", adminHandler.ListReports)
+		adminAuth.PATCH("/reports/:id", adminHandler.UpdateReport)
+		adminAuth.GET("/referrals", adminHandler.ListReferrals)
+		adminAuth.GET("/online-users", adminHandler.ListOnlineUsers)
+		adminAuth.GET("/settings", adminHandler.GetSettings)
+		adminAuth.PUT("/settings", adminHandler.UpdateSettings)
+		adminAuth.GET("/analytics", adminHandler.Analytics)
+	}
+
+	// Serve dashboard static files (built React app)
+	dashboardDir := "dashboard/dist"
+	if _, err := os.Stat(dashboardDir); err == nil {
+		r.Static("/dashboard/assets", dashboardDir+"/assets")
+		r.GET("/dashboard/*filepath", func(c *gin.Context) {
+			fp := c.Param("filepath")
+			fullPath := dashboardDir + fp
+			if _, err := os.Stat(fullPath); err != nil || strings.HasSuffix(fp, "/") || fp == "" {
+				c.File(dashboardDir + "/index.html")
+				return
+			}
+			c.File(fullPath)
+		})
+	}
 
 	return r
 }

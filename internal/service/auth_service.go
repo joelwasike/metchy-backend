@@ -165,6 +165,69 @@ func (s *AuthService) LoginWithGoogle(googleID, email, name, avatarURL, role str
 	return u, access, refresh, true, false, nil
 }
 
+// LoginWithApple creates or finds user by Apple ID and returns user + tokens + isNew + roleChanged flags.
+// Very similar to LoginWithGoogle. Apple provides sub (stable user ID) and optionally email/name on first sign-in.
+func (s *AuthService) LoginWithApple(appleID, email, name, role string) (*models.User, string, string, bool, bool, error) {
+	validRole := role == domain.RoleCompanion || role == domain.RoleClient
+	u, err := s.userRepo.GetByAppleID(appleID)
+	if err == nil {
+		roleChanged := validRole && u.Role != role
+		if roleChanged {
+			u.Role = role
+			_ = s.userRepo.Update(u)
+		}
+		access, _ := auth.GenerateAccessToken(&s.cfg.JWT, u.ID, u.Email, u.Role)
+		refresh, _ := auth.GenerateRefreshToken(&s.cfg.JWT, u.ID)
+		return u, access, refresh, false, roleChanged, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, "", "", false, false, err
+	}
+	// New user: check email not already used (Apple may hide email)
+	if email != "" {
+		existing, _ := s.userRepo.GetByEmail(email)
+		if existing != nil {
+			aid := appleID
+			existing.AppleID = &aid
+			roleChanged := validRole && existing.Role != role
+			if roleChanged {
+				existing.Role = role
+			}
+			if err := s.userRepo.Update(existing); err != nil {
+				return nil, "", "", false, false, err
+			}
+			access, _ := auth.GenerateAccessToken(&s.cfg.JWT, existing.ID, existing.Email, existing.Role)
+			refresh, _ := auth.GenerateRefreshToken(&s.cfg.JWT, existing.ID)
+			return existing, access, refresh, false, roleChanged, nil
+		}
+	}
+	// Create new user
+	if role != domain.RoleCompanion {
+		role = domain.RoleClient
+	}
+	aid := appleID
+	username := strings.Split(email, "@")[0]
+	if name != "" {
+		username = strings.ReplaceAll(strings.ToLower(name), " ", "_")
+	}
+	if username == "" {
+		username = "user" + fmt.Sprintf("%d", time.Now().UnixNano()%100000)
+	}
+	u = &models.User{
+		Email:       email,
+		Username:    username,
+		AppleID:     &aid,
+		Role:        role,
+		DateOfBirth: nil,
+	}
+	if err := s.userRepo.Create(u); err != nil {
+		return nil, "", "", false, false, err
+	}
+	access, _ := auth.GenerateAccessToken(&s.cfg.JWT, u.ID, u.Email, u.Role)
+	refresh, _ := auth.GenerateRefreshToken(&s.cfg.JWT, u.ID)
+	return u, access, refresh, true, false, nil
+}
+
 // ChangePassword updates the user's password. Requires current password verification.
 func (s *AuthService) ChangePassword(userID uint, currentPassword, newPassword string) error {
 	u, err := s.userRepo.GetByID(userID)

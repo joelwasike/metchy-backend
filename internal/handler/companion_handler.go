@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"lusty/internal/domain"
 	"lusty/internal/middleware"
 	"lusty/internal/models"
 	"lusty/internal/repository"
@@ -63,6 +64,20 @@ func (h *CompanionHandler) GetProfile(c *gin.Context) {
 					}
 					profMap["engagement"] = engaged
 				}
+
+				// Add platform markup to pricing for clients
+				if pricingRaw, ok := profMap["pricing"]; ok {
+					if pricingSlice, ok := pricingRaw.([]interface{}); ok {
+						for _, p := range pricingSlice {
+							if pm, ok := p.(map[string]interface{}); ok {
+								if amt, ok := pm["amount_cents"].(float64); ok {
+									pm["amount_cents"] = domain.ClientPrice(int64(amt))
+								}
+							}
+						}
+					}
+				}
+
 				out = profMap
 			}
 		}

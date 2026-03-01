@@ -26,7 +26,7 @@ type GoogleOAuthHandler struct {
 	presenceRepo  *repository.PresenceRepository
 	auditRepo     *repository.AuditLogRepository
 	companionRepo *repository.CompanionRepository
-	referralRepo  *repository.ReferralRepository
+	referralSvc   *service.ReferralService
 }
 
 func NewGoogleOAuthHandler(
@@ -35,7 +35,7 @@ func NewGoogleOAuthHandler(
 	presenceRepo *repository.PresenceRepository,
 	auditRepo *repository.AuditLogRepository,
 	companionRepo *repository.CompanionRepository,
-	referralRepo *repository.ReferralRepository,
+	referralSvc *service.ReferralService,
 ) *GoogleOAuthHandler {
 	return &GoogleOAuthHandler{
 		cfg:           cfg,
@@ -43,7 +43,7 @@ func NewGoogleOAuthHandler(
 		presenceRepo:  presenceRepo,
 		auditRepo:     auditRepo,
 		companionRepo: companionRepo,
-		referralRepo:  referralRepo,
+		referralSvc:   referralSvc,
 	}
 }
 
@@ -189,15 +189,9 @@ func (h *GoogleOAuthHandler) Token(c *gin.Context) {
 			AcceptNewRequests: true,
 		})
 	}
-	// Process referral code only for brand-new accounts
-	if isNew && req.ReferralCode != "" && h.referralRepo != nil {
-		rc, err := h.referralRepo.GetByCode(req.ReferralCode)
-		if err == nil && rc != nil && rc.UserID != u.ID {
-			_ = h.referralRepo.CreateReferral(&models.Referral{
-				ReferrerID:     rc.UserID,
-				ReferredUserID: u.ID,
-			})
-		}
+	// Process referral code only for brand-new accounts (creates referral + bonus for companions)
+	if isNew && h.referralSvc != nil {
+		h.referralSvc.ProcessReferralCode(req.ReferralCode, u)
 	}
 
 	presence, _ := h.presenceRepo.GetByUserID(u.ID)

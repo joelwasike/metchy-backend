@@ -1,9 +1,13 @@
 package database
 
 import (
+	"log"
+
 	"lusty/config"
+	"lusty/internal/domain"
 	"lusty/internal/models"
 
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -53,5 +57,31 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.Withdrawal{},
 		&models.ReferralCode{},
 		&models.Referral{},
+		&models.SystemSetting{},
 	)
+}
+
+// SeedAdmin creates the default admin account if it doesn't exist.
+func SeedAdmin(db *gorm.DB) {
+	var count int64
+	db.Model(&models.User{}).Where("role = ?", domain.RoleAdmin).Count(&count)
+	if count > 0 {
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte("admin@metchi2024"), bcrypt.DefaultCost)
+	if err != nil {
+		log.Printf("[seed] failed to hash admin password: %v", err)
+		return
+	}
+	admin := &models.User{
+		Email:        "admin@metchi.com",
+		Username:     "admin",
+		PasswordHash: string(hash),
+		Role:         domain.RoleAdmin,
+	}
+	if err := db.Create(admin).Error; err != nil {
+		log.Printf("[seed] failed to create admin user: %v", err)
+		return
+	}
+	log.Printf("[seed] admin account created: admin@metchi.com")
 }

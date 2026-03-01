@@ -252,8 +252,9 @@ func (h *InteractionHandler) Accept(c *gin.Context) {
 		EndsAt:        endsAt,
 	}
 	_ = h.interactionRepo.CreateChatSession(session)
-	// Credit companion's wallet (withdrawable after client confirms service done)
-	_ = h.walletRepo.Credit(profile.UserID, ir.Payment.AmountCents)
+	// Credit companion's wallet with base price (excluding platform markup)
+	baseCents := domain.CompanionBaseCents(ir.Payment.AmountCents)
+	_ = h.walletRepo.Credit(profile.UserID, baseCents)
 	_ = h.notifSvc.NotifyAccepted(ir.ClientID, profile.DisplayName, ir.ID)
 	// Auto-remove other pending requests when companion accepts one
 	_ = h.interactionRepo.RejectOtherPendingByCompanionID(profile.ID, ir.ID)
@@ -336,18 +337,24 @@ func (h *InteractionHandler) ServiceDone(c *gin.Context) {
 		_ = h.interactionRepo.UpdateChatSession(session)
 		_ = h.interactionRepo.DeleteMessagesBySessionID(session.ID)
 	}
-	// Credit companion's withdrawable balance so they can withdraw
+	// Credit companion's withdrawable balance (95% of her base price)
 	if ir.PaymentID != nil && ir.Payment != nil && ir.Payment.Status == "COMPLETED" {
 		comp, _ := h.companionRepo.GetByID(ir.CompanionID)
 		if comp != nil {
-			_ = h.walletRepo.CreditWithdrawable(comp.UserID, ir.Payment.AmountCents)
-			_ = h.walletRepo.RecordTransaction(comp.UserID, ir.Payment.AmountCents, domain.WalletTxTypeEarning, fmt.Sprintf("%d", ir.ID))
+			baseCents := domain.CompanionBaseCents(ir.Payment.AmountCents)
+			payoutCents := domain.CompanionPayout(baseCents)
+			_ = h.walletRepo.CreditWithdrawable(comp.UserID, payoutCents)
+			_ = h.walletRepo.RecordTransaction(comp.UserID, payoutCents, domain.WalletTxTypeEarning, fmt.Sprintf("%d", ir.ID))
+
+			// Record platform profit: markup + 5% commission
+			platformProfit := domain.PlatformFee(baseCents) + (baseCents - payoutCents)
+			_ = h.walletRepo.RecordTransaction(comp.UserID, platformProfit, domain.WalletTxTypePlatformFee, fmt.Sprintf("interaction_%d", ir.ID))
 
 			// Pay 5% referral commission to whoever referred this companion, for their first 2 transactions
 			if h.referralRepo != nil {
 				ref, err := h.referralRepo.GetReferralByReferredUserID(comp.UserID)
 				if err == nil && ref != nil && ref.CompletedCount < domain.ReferralMaxTransactions {
-					commission := int64(float64(ir.Payment.AmountCents) * domain.ReferralCommissionRate)
+					commission := int64(float64(baseCents) * domain.ReferralCommissionRate)
 					if commission > 0 {
 						_ = h.walletRepo.Credit(ref.ReferrerID, commission)
 						_ = h.walletRepo.RecordTransaction(ref.ReferrerID, commission, domain.WalletTxTypeReferralCommission,
